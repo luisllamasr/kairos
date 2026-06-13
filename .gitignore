@@ -1,0 +1,58 @@
+# --- Secrets and local configuration ---
+# Never commit credentials, API keys, or environment-specific values.
+.env
+.env.*
+!.env.example
+docs/CREDENTIALS.md
+
+# --- Dependencies ---
+node_modules/
+
+# --- Expo / React Native ---
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Metro / bundler caches
+.metro-health-check*
+
+# Native build artifacts (prebuild / bare workflow)
+ios/
+android/
+.kotlin/
+
+# --- Supabase local tooling ---
+.branches
+.temp
+supabase/.branches
+supabase/.temp
+
+# --- Logs and debug ---
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+
+# --- Editor / IDE (local only) ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- TypeScript ---
+*.tsbuildinfo
+
+# --- Test / coverage ---
+coverage/
