@@ -7,9 +7,11 @@ import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
+import { useI18n } from '@/i18n';
 import { supabase } from '@/lib/supabase';
 
 export default function SignInScreen() {
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,15 +41,15 @@ export default function SignInScreen() {
   return (
     <Screen centered>
       <Text variant="title" style={styles.title}>
-        Sign in to Kairos
+        {t('auth.signIn.title')}
       </Text>
       <Text variant="subtitle" style={styles.subtitle}>
-        We will send a code to your email.
+        {t('auth.signIn.subtitle')}
       </Text>
       <Input
         value={email}
         onChangeText={setEmail}
-        placeholder="your@email.com"
+        placeholder={t('auth.signIn.emailPlaceholder')}
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
@@ -58,7 +60,7 @@ export default function SignInScreen() {
           {error}
         </Text>
       ) : null}
-      <Button label="Send code" onPress={handleSendCode} loading={loading} />
+      <Button label={t('auth.signIn.submit')} onPress={handleSendCode} loading={loading} />
     </Screen>
   );
 }

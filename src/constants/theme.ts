@@ -1,23 +1,37 @@
-export const Colors = {
-  // Backgrounds
-  background: '#FFFFFF',
+export type ThemeColors = {
+  background: string;
+  textPrimary: string;
+  textSecondary: string;
+  textDisabled: string;
+  textInverse: string;
+  // Brand and textPrimary share the same black today.
+  // They are separate so switching to a distinct brand color later touches one token.
+  brand: string;
+  error: string;
+  border: string;
+};
 
-  // Text
+export const LightColors: ThemeColors = {
+  background: '#FFFFFF',
   textPrimary: '#111111',
   textSecondary: '#555555',
   textDisabled: '#AAAAAA',
   textInverse: '#FFFFFF',
-
-  // Brand / primary actions
-  // Same black as textPrimary today; easy to update to a brand color later.
   brand: '#111111',
-
-  // Semantic
   error: '#CC0000',
-
-  // Borders / surfaces
   border: '#DDDDDD',
-} as const;
+};
+
+export const DarkColors: ThemeColors = {
+  background: '#111111',
+  textPrimary: '#F0F0F0',
+  textSecondary: '#888888',
+  textDisabled: '#555555',
+  textInverse: '#111111',
+  brand: '#F0F0F0',
+  error: '#FF6B6B',
+  border: '#333333',
+};
 
 export const Spacing = {
   xs: 4,

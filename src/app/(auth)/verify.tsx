@@ -7,9 +7,11 @@ import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { FontSize, Spacing } from '@/constants/theme';
+import { useI18n } from '@/i18n';
 import { supabase } from '@/lib/supabase';
 
 export default function VerifyScreen() {
+  const { t } = useI18n();
   const { email } = useLocalSearchParams<{ email: string }>();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,15 +41,15 @@ export default function VerifyScreen() {
   return (
     <Screen centered>
       <Text variant="title" style={styles.title}>
-        Check your email
+        {t('auth.verify.title')}
       </Text>
       <Text variant="subtitle" style={styles.subtitle}>
-        Enter the 6-digit code sent to {email}.
+        {t('auth.verify.subtitle', { email: email ?? '' })}
       </Text>
       <Input
         value={code}
         onChangeText={setCode}
-        placeholder="000000"
+        placeholder={t('auth.verify.codePlaceholder')}
         keyboardType="number-pad"
         maxLength={6}
         autoFocus
@@ -58,7 +60,7 @@ export default function VerifyScreen() {
           {error}
         </Text>
       ) : null}
-      <Button label="Verify code" onPress={handleVerify} loading={loading} />
+      <Button label={t('auth.verify.submit')} onPress={handleVerify} loading={loading} />
     </Screen>
   );
 }

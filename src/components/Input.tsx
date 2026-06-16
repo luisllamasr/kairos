@@ -1,26 +1,33 @@
 import { StyleSheet, TextInput, TextInputProps } from 'react-native';
 
-import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
+import { FontSize, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export function Input({ style, ...props }: TextInputProps) {
+  const colors = useTheme();
   return (
     <TextInput
-      style={[styles.input, style]}
-      placeholderTextColor={Colors.textDisabled}
+      style={[
+        styles.base,
+        {
+          borderColor: colors.border,
+          color: colors.textPrimary,
+          backgroundColor: colors.background,
+        },
+        style,
+      ]}
+      placeholderTextColor={colors.textDisabled}
       {...props}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  input: {
+  base: {
     borderWidth: 1,
-    borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: 12,
     fontSize: FontSize.md,
-    color: Colors.textPrimary,
-    backgroundColor: Colors.background,
   },
 });

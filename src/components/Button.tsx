@@ -6,7 +6,8 @@ import {
   TouchableOpacityProps,
 } from 'react-native';
 
-import { Colors, FontSize, FontWeight, Radius } from '@/constants/theme';
+import { FontSize, FontWeight, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 type Variant = 'primary' | 'secondary';
 
@@ -24,13 +25,21 @@ export function Button({
   style,
   ...props
 }: Props) {
+  const colors = useTheme();
   const isPrimary = variant === 'primary';
+
+  const dynamicContainer = isPrimary
+    ? { backgroundColor: colors.brand }
+    : { borderColor: colors.border };
+
+  const labelColor = isPrimary ? colors.textInverse : colors.textSecondary;
 
   return (
     <TouchableOpacity
       style={[
         styles.base,
-        isPrimary ? styles.primary : styles.secondary,
+        isPrimary ? styles.primaryBase : styles.secondaryBase,
+        dynamicContainer,
         (disabled || loading) && styles.disabled,
         style,
       ]}
@@ -38,11 +47,9 @@ export function Button({
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={isPrimary ? Colors.textInverse : Colors.textPrimary} />
+        <ActivityIndicator color={labelColor} />
       ) : (
-        <Text style={[styles.label, isPrimary ? styles.primaryLabel : styles.secondaryLabel]}>
-          {label}
-        </Text>
+        <Text style={[styles.label, { color: labelColor }]}>{label}</Text>
       )}
     </TouchableOpacity>
   );
@@ -52,16 +59,15 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: Radius.md,
     paddingVertical: 14,
+    // Horizontal padding ensures compact buttons (non-full-width containers) look right.
+    paddingHorizontal: Spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primary: {
-    backgroundColor: Colors.brand,
-  },
-  secondary: {
+  primaryBase: {},
+  secondaryBase: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: Colors.border,
   },
   disabled: {
     opacity: 0.5,
@@ -69,11 +75,5 @@ const styles = StyleSheet.create({
   label: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
-  },
-  primaryLabel: {
-    color: Colors.textInverse,
-  },
-  secondaryLabel: {
-    color: Colors.textSecondary,
   },
 });
