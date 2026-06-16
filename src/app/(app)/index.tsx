@@ -1,5 +1,9 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { Button } from '@/components/Button';
+import { Screen } from '@/components/Screen';
+import { Text } from '@/components/Text';
+import { Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 export default function HomeScreen() {
@@ -8,45 +12,27 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Kairos</Text>
-      <Text style={styles.subtitle}>Experiences worth remembering.</Text>
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Text style={styles.signOutText}>Sign out</Text>
-      </TouchableOpacity>
-    </View>
+    <Screen centered style={styles.screen}>
+      <Text variant="hero" style={styles.title}>
+        Kairos
+      </Text>
+      <Text variant="subtitle" style={styles.subtitle}>
+        Experiences worth remembering.
+      </Text>
+      <Button label="Sign out" variant="secondary" onPress={handleSignOut} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  screen: {
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: '#FFFFFF',
   },
   title: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#111111',
+    marginBottom: Spacing.sm,
   },
   subtitle: {
-    marginTop: 8,
-    fontSize: 16,
-    color: '#555555',
+    marginBottom: Spacing.xxl,
     textAlign: 'center',
-    marginBottom: 48,
-  },
-  signOutButton: {
-    borderWidth: 1,
-    borderColor: '#DDDDDD',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  signOutText: {
-    fontSize: 15,
-    color: '#555555',
   },
 });

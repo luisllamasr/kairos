@@ -1,14 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import { Screen } from '@/components/Screen';
+import { Text } from '@/components/Text';
+import { FontSize, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 export default function VerifyScreen() {
@@ -39,84 +37,46 @@ export default function VerifyScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Check your email</Text>
-      <Text style={styles.subtitle}>Enter the 6-digit code sent to {email}.</Text>
-
-      <TextInput
-        style={styles.input}
+    <Screen centered>
+      <Text variant="title" style={styles.title}>
+        Check your email
+      </Text>
+      <Text variant="subtitle" style={styles.subtitle}>
+        Enter the 6-digit code sent to {email}.
+      </Text>
+      <Input
         value={code}
         onChangeText={setCode}
         placeholder="000000"
         keyboardType="number-pad"
         maxLength={6}
         autoFocus
+        style={styles.codeInput}
       />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleVerify}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.buttonText}>Verify code</Text>
-        )}
-      </TouchableOpacity>
-    </View>
+      {error ? (
+        <Text variant="error" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+      <Button label="Verify code" onPress={handleVerify} loading={loading} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
   title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111111',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#555555',
-    marginBottom: 32,
+    marginBottom: Spacing.xl,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#DDDDDD',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 24,
+  codeInput: {
+    fontSize: FontSize.xl,
     letterSpacing: 8,
     textAlign: 'center',
-    marginBottom: 16,
-    color: '#111111',
+    marginBottom: Spacing.md,
   },
   error: {
-    color: '#CC0000',
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: '#111111',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    marginBottom: Spacing.sm,
   },
 });

@@ -1,14 +1,12 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import { Screen } from '@/components/Screen';
+import { Text } from '@/components/Text';
+import { Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 export default function SignInScreen() {
@@ -39,82 +37,43 @@ export default function SignInScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sign in to Kairos</Text>
-      <Text style={styles.subtitle}>We will send a code to your email.</Text>
-
-      <TextInput
-        style={styles.input}
+    <Screen centered>
+      <Text variant="title" style={styles.title}>
+        Sign in to Kairos
+      </Text>
+      <Text variant="subtitle" style={styles.subtitle}>
+        We will send a code to your email.
+      </Text>
+      <Input
         value={email}
         onChangeText={setEmail}
         placeholder="your@email.com"
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
+        style={styles.input}
       />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSendCode}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.buttonText}>Send code</Text>
-        )}
-      </TouchableOpacity>
-    </View>
+      {error ? (
+        <Text variant="error" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+      <Button label="Send code" onPress={handleSendCode} loading={loading} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
   title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111111',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#555555',
-    marginBottom: 32,
+    marginBottom: Spacing.xl,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#DDDDDD',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    marginBottom: 16,
-    color: '#111111',
+    marginBottom: Spacing.md,
   },
   error: {
-    color: '#CC0000',
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: '#111111',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    marginBottom: Spacing.sm,
   },
 });
