@@ -13,6 +13,22 @@ export const en = {
   'home.subtitle': 'Experiences worth remembering.',
   'home.signOut': 'Sign out',
   'home.switchLanguage': 'Español',
+
+  'onboarding.title': 'Welcome to Kairos',
+  'onboarding.subtitle': 'Create your identity to get started.',
+  'onboarding.username.placeholder': 'angel.luna',
+  'onboarding.username.hint': 'Letters, numbers, . _ - · 3–30 characters',
+  'onboarding.displayName.placeholder': 'Angel Luna',
+  'onboarding.submit': 'Continue',
+  'onboarding.error.usernameTaken': 'This username is already taken',
+  'onboarding.error.usernameInvalid': 'Only lowercase letters, numbers, . _ and - allowed',
+  'onboarding.error.usernameTooShort': 'Username must be at least 3 characters',
+  'onboarding.error.usernameRequired': 'Username is required',
+  'onboarding.error.displayNameRequired': 'Display name is required',
+  'onboarding.error.save': 'Could not save your profile. Please try again.',
+
+  'error.profileLoad': 'Could not load your profile',
+  'error.retry': 'Try again',
 } as const;
 
 export type TranslationKey = keyof typeof en;
