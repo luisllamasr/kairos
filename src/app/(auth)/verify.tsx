@@ -59,7 +59,7 @@ export default function VerifyScreen() {
   }
 
   return (
-    <Screen centered>
+    <Screen centered avoidKeyboard>
       <Text variant="title" style={styles.title}>
         {t('auth.verify.title')}
       </Text>

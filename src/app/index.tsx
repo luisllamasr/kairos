@@ -30,7 +30,7 @@ export default function RootIndex() {
   }
 
   if (!profile?.username) return <Redirect href="/(onboarding)" />;
-  return <Redirect href="/(app)" />;
+  return <Redirect href="/(app)/(home)" />;
 }
 
 const styles = StyleSheet.create({

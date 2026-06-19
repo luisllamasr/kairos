@@ -9,7 +9,7 @@ export default function OnboardingLayout() {
   if (!session) return <Redirect href="/(auth)/sign-in" />;
   // Profile is now complete — redirect to the main app.
   // This fires automatically after refreshProfile() is called on onboarding completion.
-  if (profile?.username) return <Redirect href="/(app)" />;
+  if (profile?.username) return <Redirect href="/(app)/(home)" />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

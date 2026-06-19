@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -10,25 +11,25 @@ import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
-import { uploadAvatar, validateUsername } from '@/lib/profile';
+import { cleanupUserAvatars, getAvatarPublicUrl, uploadAvatar, validateUsername } from '@/lib/profile';
 import { supabase } from '@/lib/supabase';
 
-export default function OnboardingScreen() {
-  const { session, refreshProfile } = useAuth();
+export default function EditProfileScreen() {
+  const { session, profile, refreshProfile } = useAuth();
   const { t } = useI18n();
 
   const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
   // base64 string returned by expo-image-picker — used for upload, not for display.
   const [localAvatarBase64, setLocalAvatarBase64] = useState<string | null>(null);
-  const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState(profile?.username ?? '');
+  const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handlePickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      setError(t('onboarding.error.avatarPermission'));
+      setError(t('editProfile.error.avatarPermission'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -50,8 +51,8 @@ export default function OnboardingScreen() {
     const u = username.trim();
     const d = displayName.trim();
 
-    if (!validateUsername(u)) return t('onboarding.error.usernameInvalid');
-    if (!d) return t('onboarding.error.displayNameInvalid');
+    if (!validateUsername(u)) return t('editProfile.error.usernameInvalid');
+    if (!d) return t('editProfile.error.displayNameInvalid');
     return null;
   }
 
@@ -65,13 +66,23 @@ export default function OnboardingScreen() {
     setLoading(true);
     setError(null);
 
-    // Upload avatar first (if selected) so the storage path is available
-    // for the profile update in the same operation.
+    // Defensive: if the user picked an image but the picker returned no base64 data
+    // (can happen on some Android configurations despite base64: true), surface the
+    // error rather than silently skipping the upload and saving without a new avatar.
+    if (localAvatarUri && !localAvatarBase64) {
+      setError(t('editProfile.error.avatarUpload'));
+      setLoading(false);
+      return;
+    }
+
+    // Upload avatar first so the new path is available for the DB update.
+    // Each upload goes to a unique timestamped path — the old file is cleaned
+    // up below after the DB update confirms the switch was successful.
     let avatarPath: string | undefined;
     if (localAvatarBase64) {
       const uploaded = await uploadAvatar(localAvatarBase64, session!.user.id);
       if (uploaded === null) {
-        setError(t('onboarding.error.avatarUpload'));
+        setError(t('editProfile.error.avatarUpload'));
         setLoading(false);
         return;
       }
@@ -92,27 +103,37 @@ export default function OnboardingScreen() {
     if (saveError) {
       // 23505 = unique_violation — username is already taken.
       if (saveError.code === '23505') {
-        setError(t('onboarding.error.usernameTaken'));
+        setError(t('editProfile.error.usernameTaken'));
       } else {
-        setError(t('onboarding.error.save'));
+        setError(t('editProfile.error.save'));
       }
       return;
     }
 
+    // Sweep all stale avatars for this user after a successful DB update.
+    // Fire-and-forget: cleanup failure never blocks the user. The sweep is
+    // self-healing — any orphans from a previous failed cleanup are removed
+    // automatically the next time the user saves a new avatar.
+    if (avatarPath) {
+      void cleanupUserAvatars(session!.user.id, avatarPath);
+    }
+
     await refreshProfile();
+    router.back();
   }
 
+  // localAvatarUri takes priority — shows the newly picked image before upload.
+  // Falls back to the existing CDN URL, or null which renders the initials placeholder.
+  const avatarUri = localAvatarUri ?? getAvatarPublicUrl(profile?.avatar_url);
+
   return (
-    <Screen centered avoidKeyboard>
-      <Text variant="hero" style={styles.title}>
-        {t('onboarding.title')}
-      </Text>
-      <Text variant="subtitle" style={styles.subtitle}>
-        {t('onboarding.subtitle')}
+    <Screen centered avoidKeyboard edges={['top', 'left', 'right']}>
+      <Text variant="title" style={styles.title}>
+        {t('editProfile.title')}
       </Text>
 
       <Avatar
-        uri={localAvatarUri}
+        uri={avatarUri}
         displayName={displayName || undefined}
         size={88}
         onPress={handlePickAvatar}
@@ -120,7 +141,7 @@ export default function OnboardingScreen() {
         style={styles.avatar}
       />
       <Text variant="caption" style={styles.avatarLabel}>
-        {t('onboarding.avatar.label')}
+        {t('editProfile.avatar.label')}
       </Text>
 
       <Input
@@ -164,10 +185,16 @@ export default function OnboardingScreen() {
       ) : null}
 
       <Button
-        label={t('onboarding.submit')}
+        label={t('editProfile.submit')}
         onPress={handleSave}
         loading={loading}
-        style={styles.button}
+        style={styles.saveButton}
+      />
+      <Button
+        label={t('editProfile.cancel')}
+        variant="secondary"
+        onPress={() => router.back()}
+        style={styles.cancelButton}
       />
     </Screen>
   );
@@ -175,10 +202,8 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   title: {
-    marginBottom: Spacing.sm,
-  },
-  subtitle: {
-    marginBottom: Spacing.lg,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
   },
   avatar: {
     alignSelf: 'center',
@@ -198,7 +223,9 @@ const styles = StyleSheet.create({
   error: {
     marginBottom: Spacing.sm,
   },
-  button: {
+  saveButton: {
     marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
+  cancelButton: {},
 });

@@ -4,41 +4,65 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  View,
   ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Edge, SafeAreaView } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+const DEFAULT_EDGES: Edge[] = ['top', 'left', 'right', 'bottom'];
+
 interface Props {
   children: ReactNode;
-  // Applied to the ScrollView contentContainerStyle — use for layout-level overrides only.
+  // Applied to the content container — use for layout-level overrides only.
   style?: ViewStyle;
   centered?: boolean;
+  // Wrap content in a KeyboardAvoidingView + ScrollView. Use on form screens only.
+  avoidKeyboard?: boolean;
+  // Safe area edges to apply. Tab screens should omit bottom (the tab bar handles it).
+  edges?: Edge[];
 }
 
-export function Screen({ children, style, centered }: Props) {
+export function Screen({
+  children,
+  style,
+  centered,
+  avoidKeyboard = false,
+  edges = DEFAULT_EDGES,
+}: Props) {
   const colors = useTheme();
 
+  // Static centered screens use a flex View — single-pass layout, no ScrollView jump.
+  // Form screens keep ScrollView + KeyboardAvoidingView for keyboard scroll behavior.
+  const useStaticLayout = centered && !avoidKeyboard;
+
+  const content = useStaticLayout ? (
+    <View style={[styles.flex, styles.padded, styles.centered, style]}>{children}</View>
+  ) : (
+    <ScrollView
+      style={avoidKeyboard ? styles.flex : undefined}
+      contentContainerStyle={[styles.scrollContent, centered && styles.centered, style]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  );
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        // 'padding' reduces the KAV height when the keyboard opens, so the ScrollView
-        // re-centers its content in the remaining space. This is what makes centered
-        // screens (auth) visually shift the content up correctly.
-        // 'height' on Android serves the same purpose on that platform.
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          contentContainerStyle={[styles.scroll, centered && styles.centered, style]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <SafeAreaView edges={edges} style={[styles.safe, { backgroundColor: colors.background }]}>
+      {avoidKeyboard ? (
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {content}
+        </KeyboardAvoidingView>
+      ) : (
+        content
+      )}
     </SafeAreaView>
   );
 }
@@ -46,7 +70,10 @@ export function Screen({ children, style, centered }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
-  scroll: {
+  padded: {
+    padding: Spacing.lg,
+  },
+  scrollContent: {
     flexGrow: 1,
     padding: Spacing.lg,
   },

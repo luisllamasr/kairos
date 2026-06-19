@@ -85,7 +85,7 @@ export default function SignInScreen() {
   }
 
   return (
-    <Screen centered>
+    <Screen centered avoidKeyboard>
       <Text variant="title" style={styles.title}>
         {t('auth.signIn.title')}
       </Text>

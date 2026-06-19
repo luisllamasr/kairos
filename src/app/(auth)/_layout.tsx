@@ -8,7 +8,7 @@ export default function AuthLayout() {
   if (loading) return null;
   // Any session holder is redirected out of the auth group.
   // (app)/_layout.tsx handles the profile-completeness check from there.
-  if (session) return <Redirect href="/(app)" />;
+  if (session) return <Redirect href="/(app)/(home)" />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

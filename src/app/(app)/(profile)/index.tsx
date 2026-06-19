@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
@@ -7,27 +8,26 @@ import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
+import { getAvatarPublicUrl } from '@/lib/profile';
 import { supabase } from '@/lib/supabase';
 
-// Constructs the public URL for an avatars bucket path.
-// Returns null if no path is stored — Avatar handles the placeholder.
-function getAvatarUri(storagePath: string | null | undefined): string | null {
-  if (!storagePath) return null;
-  return supabase.storage.from('avatars').getPublicUrl(storagePath).data.publicUrl;
-}
-
-export default function HomeScreen() {
+export default function ProfileScreen() {
   const { profile } = useAuth();
   const { t } = useI18n();
+
+  // Each avatar upload writes to a unique timestamped path, so profile.avatar_url
+  // changes after every save. The CDN URL naturally points to a new resource —
+  // no cache-busting query params needed.
+  const avatarUri = getAvatarPublicUrl(profile?.avatar_url ?? null);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
   }
 
   return (
-    <Screen centered style={styles.screen}>
+    <Screen centered edges={['top', 'left', 'right']}>
       <Avatar
-        uri={getAvatarUri(profile?.avatar_url)}
+        uri={avatarUri}
         displayName={profile?.display_name}
         size={88}
         style={styles.avatar}
@@ -39,7 +39,12 @@ export default function HomeScreen() {
         @{profile?.username}
       </Text>
       <Button
-        label={t('home.signOut')}
+        label={t('profile.editProfile')}
+        onPress={() => router.push('/(app)/(profile)/edit-profile')}
+        style={styles.editButton}
+      />
+      <Button
+        label={t('profile.signOut')}
         variant="secondary"
         onPress={handleSignOut}
       />
@@ -48,16 +53,19 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    alignItems: 'center',
-  },
   avatar: {
+    alignSelf: 'center',
     marginBottom: Spacing.lg,
   },
   name: {
+    textAlign: 'center',
     marginBottom: Spacing.xs,
   },
   username: {
+    textAlign: 'center',
     marginBottom: Spacing.xxl,
+  },
+  editButton: {
+    marginBottom: Spacing.sm,
   },
 });

@@ -14,17 +14,24 @@ export const en = {
   'auth.verify.submit': 'Verify code',
   'auth.verify.changeEmail': 'Use a different email',
 
-  'home.signOut': 'Sign out',
+  'tab.home': 'Home',
+  'tab.profile': 'Profile',
+
+  'home.comingSoon': 'Experiences are coming soon.',
+
+  // Rules describe the field constraints — shared between onboarding and edit profile.
+  'profile.username.rules.length': '· 3–30 characters',
+  'profile.username.rules.chars': '· Lowercase letters, numbers, . _ and -',
+  'profile.username.rules.alphanum': '· At least one letter or number',
+  'profile.displayName.rules.length': '· 1–50 characters',
+  'profile.editProfile': 'Edit profile',
+  'profile.signOut': 'Sign out',
 
   'onboarding.title': 'Welcome to Kairos',
   'onboarding.subtitle': 'Create your identity to get started.',
   'onboarding.avatar.label': 'Profile photo (optional)',
   'onboarding.username.placeholder': 'your.name',
-  'onboarding.username.rules.length': '· 3–30 characters',
-  'onboarding.username.rules.chars': '· Lowercase letters, numbers, . _ and -',
-  'onboarding.username.rules.alphanum': '· At least one letter or number',
   'onboarding.displayName.placeholder': 'Your Name',
-  'onboarding.displayName.rules.length': '· 1–50 characters',
   'onboarding.submit': 'Continue',
   'onboarding.error.usernameTaken': 'This username is already taken',
   'onboarding.error.usernameInvalid': 'Please follow the username rules.',
@@ -32,6 +39,17 @@ export const en = {
   'onboarding.error.save': 'Could not save your profile. Please try again.',
   'onboarding.error.avatarUpload': 'Could not upload photo. Please try again.',
   'onboarding.error.avatarPermission': 'Photo library access is required to add a photo.',
+
+  'editProfile.title': 'Edit Profile',
+  'editProfile.avatar.label': 'Tap to change photo',
+  'editProfile.submit': 'Save changes',
+  'editProfile.cancel': 'Cancel',
+  'editProfile.error.usernameInvalid': 'Please follow the username rules.',
+  'editProfile.error.usernameTaken': 'This username is already taken',
+  'editProfile.error.displayNameInvalid': 'Please follow the display name rules.',
+  'editProfile.error.avatarUpload': 'Could not upload photo. Please try again.',
+  'editProfile.error.avatarPermission': 'Photo library access is required to add a photo.',
+  'editProfile.error.save': 'Could not save your profile. Please try again.',
 
   'error.profileLoad': 'Could not load your profile',
   'error.retry': 'Try again',
