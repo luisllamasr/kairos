@@ -46,7 +46,10 @@ Thumbs.db
 
 # --- Editor / IDE (local only) ---
 .idea/
-.vscode/
+# Ignore personal VS Code preferences but commit project-wide settings
+# (e.g. Deno enablePaths) so every developer gets the correct configuration.
+.vscode/*
+!.vscode/settings.json
 *.swp
 *.swo
 *~

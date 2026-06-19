@@ -78,6 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Reset loading so guards do not fire before the profile arrives.
+    // On fresh login the session transitions null -> new session while
+    // loading is already false, so we must block routing until the fetch settles.
+    setLoading(true);
     setProfileError(false);
 
     supabase

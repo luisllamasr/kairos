@@ -172,22 +172,23 @@ Do not add dependencies without a clear reason.
 # Current status
 
 Phase:
-Initial setup.
+Foundation complete.
 
 Created by:
 Luis Llamas Ramón
 
+Completed milestones:
+
+1. Configure project structure. ✓
+2. Create the mobile application base. ✓
+3. Connect Supabase. ✓
+4. Implement authentication (Email OTP, session management, AuthProvider). ✓
+5. User profile (onboarding, username, avatar upload). ✓
+6. Storage cleanup (pg_net trigger → Edge Function on account deletion). ✓
+
 Current goal:
 
-Build a clean foundation before implementing features.
-
-First milestones:
-
-1. Configure project structure.
-2. Create the mobile application base.
-3. Connect Supabase.
-4. Implement authentication.
-5. Build the first experience creation flow.
+Build the first experience creation flow.
 
 ---
 

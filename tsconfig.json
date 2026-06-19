@@ -6,5 +6,9 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  // Exclude Deno Edge Functions — they use Deno-specific globals and jsr: imports
+  // that the Node TypeScript engine cannot resolve. The Deno VS Code extension
+  // (denoland.vscode-deno) handles type-checking for supabase/functions/ instead.
+  "exclude": ["supabase/functions"]
 }

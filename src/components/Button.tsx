@@ -38,7 +38,7 @@ export function Button({
     <TouchableOpacity
       style={[
         styles.base,
-        isPrimary ? styles.primaryBase : styles.secondaryBase,
+        !isPrimary && styles.secondaryBase,
         dynamicContainer,
         (disabled || loading) && styles.disabled,
         style,
@@ -64,7 +64,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryBase: {},
   secondaryBase: {
     backgroundColor: 'transparent',
     borderWidth: 1,

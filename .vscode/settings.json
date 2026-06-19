@@ -1,0 +1,9 @@
+{
+  // Deno is disabled for the main project (React Native uses Node TypeScript).
+  // It is enabled only for supabase/functions/, where Edge Functions live.
+  // Requires the Deno VS Code extension: denoland.vscode-deno
+  "deno.enable": false,
+  "deno.enablePaths": ["supabase/functions"],
+  "deno.lint": true,
+  "deno.unstable": []
+}

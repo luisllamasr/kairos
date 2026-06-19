@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { Button } from '@/components/Button';
@@ -8,6 +8,7 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { FontSize, Spacing } from '@/constants/theme';
 import { useI18n } from '@/i18n';
+import { otpPending } from '@/lib/otp-pending';
 import { supabase } from '@/lib/supabase';
 
 export default function VerifyScreen() {
@@ -17,13 +18,24 @@ export default function VerifyScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Guard against navigation state restoration.
+  // Expo Router can restore this screen on app restart via its saved nav state.
+  // otpPending is an in-memory flag (cleared on restart) that confirms the user
+  // arrived through sign-in's handleSendCode, not through state restoration.
+  // If the check fails, redirect immediately to the email input screen.
+  useEffect(() => {
+    if (!email || otpPending.get() !== email) {
+      router.replace('/(auth)/sign-in');
+    }
+  }, [email]);
+
   async function handleVerify() {
     if (!code.trim() || !email) return;
 
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { error: verifyError } = await supabase.auth.verifyOtp({
       email,
       token: code.trim(),
       type: 'email',
@@ -31,11 +43,19 @@ export default function VerifyScreen() {
 
     setLoading(false);
 
-    if (error) {
-      setError(error.message);
+    if (verifyError) {
+      setError(verifyError.message);
+    } else {
+      // Clear the pending flag on successful verification.
+      otpPending.clear();
+      // onAuthStateChange in AuthProvider fires automatically —
+      // (auth)/_layout.tsx handles the redirect to /(app).
     }
-    // On success, onAuthStateChange fires in useSession,
-    // session state updates, and (app)/_layout.tsx redirects automatically.
+  }
+
+  function handleGoBack() {
+    otpPending.clear();
+    router.back();
   }
 
   return (
@@ -61,6 +81,12 @@ export default function VerifyScreen() {
         </Text>
       ) : null}
       <Button label={t('auth.verify.submit')} onPress={handleVerify} loading={loading} />
+      <Button
+        label={t('auth.verify.changeEmail')}
+        variant="secondary"
+        onPress={handleGoBack}
+        style={styles.backButton}
+      />
     </Screen>
   );
 }
@@ -80,5 +106,8 @@ const styles = StyleSheet.create({
   },
   error: {
     marginBottom: Spacing.sm,
+  },
+  backButton: {
+    marginTop: Spacing.sm,
   },
 });

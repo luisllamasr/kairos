@@ -29,7 +29,7 @@ export default function RootIndex() {
     );
   }
 
-  if (!profile?.username) return <Redirect href="/(onboarding)/index" />;
+  if (!profile?.username) return <Redirect href="/(onboarding)" />;
   return <Redirect href="/(app)" />;
 }
 

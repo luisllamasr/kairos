@@ -11,7 +11,7 @@ export default function AppLayout() {
   // Only redirect to onboarding when the profile loaded successfully and is incomplete.
   // profileError: the user is already in the app — a transient network error should not
   // kick them to onboarding. They stay here and can retry profile actions inside the app.
-  if (!profileError && !profile?.username) return <Redirect href="/(onboarding)/index" />;
+  if (!profileError && !profile?.username) return <Redirect href="/(onboarding)" />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }
