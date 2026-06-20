@@ -25,6 +25,7 @@ export const en = {
   'profile.username.rules.alphanum': '· At least one letter or number',
   'profile.displayName.rules.length': '· 1–50 characters',
   'profile.editProfile': 'Edit profile',
+  'profile.deleteAccount': 'Delete account',
   'profile.signOut': 'Sign out',
 
   'onboarding.title': 'Welcome to Kairos',
@@ -50,6 +51,15 @@ export const en = {
   'editProfile.error.avatarUpload': 'Could not upload photo. Please try again.',
   'editProfile.error.avatarPermission': 'Photo library access is required to add a photo.',
   'editProfile.error.save': 'Could not save your profile. Please try again.',
+
+  'deleteAccount.title': 'Delete Account',
+  'deleteAccount.warning':
+    'This permanently deletes your account, profile, and avatar. This cannot be undone.',
+  'deleteAccount.confirmPrompt': 'Type your username (@{{username}}) to confirm:',
+  'deleteAccount.submit': 'Delete my account',
+  'deleteAccount.cancel': 'Cancel',
+  'deleteAccount.error.unauthorized': 'Your session expired. Please sign in again.',
+  'deleteAccount.error.failed': 'Could not delete your account. Please try again.',
 
   'error.profileLoad': 'Could not load your profile',
   'error.retry': 'Try again',

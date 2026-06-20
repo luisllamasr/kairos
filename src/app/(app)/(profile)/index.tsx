@@ -47,6 +47,12 @@ export default function ProfileScreen() {
         label={t('profile.signOut')}
         variant="secondary"
         onPress={handleSignOut}
+        style={styles.signOutButton}
+      />
+      <Button
+        label={t('profile.deleteAccount')}
+        variant="destructive"
+        onPress={() => router.push('/(app)/(profile)/delete-account')}
       />
     </Screen>
   );
@@ -66,6 +72,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
   },
   editButton: {
+    marginBottom: Spacing.sm,
+  },
+  signOutButton: {
     marginBottom: Spacing.sm,
   },
 });

@@ -26,6 +26,7 @@ export const es: Record<TranslationKey, string> = {
   'profile.username.rules.alphanum': '· Al menos una letra o número',
   'profile.displayName.rules.length': '· 1–50 caracteres',
   'profile.editProfile': 'Editar perfil',
+  'profile.deleteAccount': 'Eliminar cuenta',
   'profile.signOut': 'Cerrar sesión',
 
   'onboarding.title': 'Bienvenido a Kairos',
@@ -51,6 +52,15 @@ export const es: Record<TranslationKey, string> = {
   'editProfile.error.avatarUpload': 'No se pudo subir la foto. Por favor, inténtalo de nuevo.',
   'editProfile.error.avatarPermission': 'Se necesita acceso a la galería para agregar una foto.',
   'editProfile.error.save': 'No se pudo guardar tu perfil. Por favor, inténtalo de nuevo.',
+
+  'deleteAccount.title': 'Eliminar Cuenta',
+  'deleteAccount.warning':
+    'Esto elimina permanentemente tu cuenta, perfil y avatar. No se puede deshacer.',
+  'deleteAccount.confirmPrompt': 'Escribe tu nombre de usuario (@{{username}}) para confirmar:',
+  'deleteAccount.submit': 'Eliminar mi cuenta',
+  'deleteAccount.cancel': 'Cancelar',
+  'deleteAccount.error.unauthorized': 'Tu sesión expiró. Por favor, inicia sesión de nuevo.',
+  'deleteAccount.error.failed': 'No se pudo eliminar tu cuenta. Por favor, inténtalo de nuevo.',
 
   'error.profileLoad': 'No se pudo cargar tu perfil',
   'error.retry': 'Reintentar',

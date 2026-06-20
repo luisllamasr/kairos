@@ -183,8 +183,9 @@ Completed milestones:
 2. Create the mobile application base. ✓
 3. Connect Supabase. ✓
 4. Implement authentication (Email OTP, session management, AuthProvider). ✓
-5. User profile (onboarding, username, avatar upload). ✓
+5. User profile (onboarding, edit profile, avatar upload, tab navigation). ✓
 6. Storage cleanup (pg_net trigger → Edge Function on account deletion). ✓
+7. Self-service account deletion (delete-account Edge Function, confirmation UX). ✓
 
 Current goal:
 

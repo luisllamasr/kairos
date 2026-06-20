@@ -9,7 +9,7 @@ import {
 import { FontSize, FontWeight, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-type Variant = 'primary' | 'secondary';
+type Variant = 'primary' | 'secondary' | 'destructive';
 
 interface Props extends Omit<TouchableOpacityProps, 'children'> {
   label: string;
@@ -27,18 +27,22 @@ export function Button({
 }: Props) {
   const colors = useTheme();
   const isPrimary = variant === 'primary';
+  const isDestructive = variant === 'destructive';
 
   const dynamicContainer = isPrimary
     ? { backgroundColor: colors.brand }
-    : { borderColor: colors.border };
+    : isDestructive
+      ? { backgroundColor: colors.error }
+      : { borderColor: colors.border };
 
-  const labelColor = isPrimary ? colors.textInverse : colors.textSecondary;
+  const labelColor =
+    isPrimary || isDestructive ? colors.textInverse : colors.textSecondary;
 
   return (
     <TouchableOpacity
       style={[
         styles.base,
-        !isPrimary && styles.secondaryBase,
+        !isPrimary && !isDestructive && styles.secondaryBase,
         dynamicContainer,
         (disabled || loading) && styles.disabled,
         style,
