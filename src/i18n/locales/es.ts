@@ -7,6 +7,12 @@ export const es: Record<TranslationKey, string> = {
   'auth.signIn.submit': 'Enviar código',
   'auth.signIn.rateLimited': 'Por seguridad, espera {{seconds}}s antes de pedir otro código.',
   'auth.signIn.error.invalidEmail': 'Introduce una dirección de correo válida.',
+  'auth.signIn.error.alreadyActive': 'Esta cuenta ya está activa en este dispositivo.',
+  'auth.signIn.error.alreadyStored': 'Esta cuenta ya está en este dispositivo.',
+  'auth.signIn.addAccount.subtitle': 'Inicia sesión con otro correo para agregarlo a este dispositivo.',
+  'auth.signIn.addAccount.cancel': 'Cancelar',
+  'auth.signIn.addAccount.cancelFailed':
+    'No pudimos restaurar tu cuenta anterior. Inténtalo de nuevo.',
   'auth.signIn.error.sendFailed': 'No pudimos enviar el código. Revisa la dirección de correo o inténtalo más tarde.',
   'auth.signIn.error.generic': 'Algo salió mal. Por favor, inténtalo de nuevo.',
 
@@ -26,6 +32,7 @@ export const es: Record<TranslationKey, string> = {
   'profile.username.rules.alphanum': '· Al menos una letra o número',
   'profile.displayName.rules.length': '· 1–50 caracteres',
   'profile.editProfile': 'Editar perfil',
+  'profile.switchAccount': 'Cambiar cuenta',
   'profile.deleteAccount': 'Eliminar cuenta',
   'profile.signOut': 'Cerrar sesión',
 
@@ -61,6 +68,14 @@ export const es: Record<TranslationKey, string> = {
   'deleteAccount.cancel': 'Cancelar',
   'deleteAccount.error.unauthorized': 'Tu sesión expiró. Por favor, inicia sesión de nuevo.',
   'deleteAccount.error.failed': 'No se pudo eliminar tu cuenta. Por favor, inténtalo de nuevo.',
+
+  'switchAccount.title': 'Cambiar Cuenta',
+  'switchAccount.active': 'Activa',
+  'switchAccount.switching': 'Cambiando…',
+  'switchAccount.addAccount': 'Agregar cuenta',
+  'switchAccount.cancel': 'Cancelar',
+  'switchAccount.error.failed':
+    'No se pudo cambiar a esa cuenta. Puede haber expirado — inicia sesión de nuevo.',
 
   'error.profileLoad': 'No se pudo cargar tu perfil',
   'error.retry': 'Reintentar',

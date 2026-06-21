@@ -5,6 +5,12 @@ export const en = {
   'auth.signIn.submit': 'Send code',
   'auth.signIn.rateLimited': 'For security, wait {{seconds}}s before requesting another code.',
   'auth.signIn.error.invalidEmail': 'Please enter a valid email address.',
+  'auth.signIn.error.alreadyActive': 'This account is already active on this device.',
+  'auth.signIn.error.alreadyStored': 'This account is already on this device.',
+  'auth.signIn.addAccount.subtitle': 'Sign in with another email to add it to this device.',
+  'auth.signIn.addAccount.cancel': 'Cancel',
+  'auth.signIn.addAccount.cancelFailed':
+    'Could not restore your previous account. Please try again.',
   'auth.signIn.error.sendFailed': "We couldn't send the code. Check the email address or try again later.",
   'auth.signIn.error.generic': 'Something went wrong. Please try again.',
 
@@ -25,6 +31,7 @@ export const en = {
   'profile.username.rules.alphanum': '· At least one letter or number',
   'profile.displayName.rules.length': '· 1–50 characters',
   'profile.editProfile': 'Edit profile',
+  'profile.switchAccount': 'Switch account',
   'profile.deleteAccount': 'Delete account',
   'profile.signOut': 'Sign out',
 
@@ -60,6 +67,13 @@ export const en = {
   'deleteAccount.cancel': 'Cancel',
   'deleteAccount.error.unauthorized': 'Your session expired. Please sign in again.',
   'deleteAccount.error.failed': 'Could not delete your account. Please try again.',
+
+  'switchAccount.title': 'Switch Account',
+  'switchAccount.active': 'Active',
+  'switchAccount.switching': 'Switching…',
+  'switchAccount.addAccount': 'Add account',
+  'switchAccount.cancel': 'Cancel',
+  'switchAccount.error.failed': 'Could not switch to that account. It may have expired — sign in again.',
 
   'error.profileLoad': 'Could not load your profile',
   'error.retry': 'Try again',

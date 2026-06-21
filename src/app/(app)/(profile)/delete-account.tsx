@@ -10,10 +10,9 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
 import { deleteAccount } from '@/lib/account';
-import { supabase } from '@/lib/supabase';
 
 export default function DeleteAccountScreen() {
-  const { profile } = useAuth();
+  const { profile, completeAccountDeletion } = useAuth();
   const { t } = useI18n();
 
   const [confirmText, setConfirmText] = useState('');
@@ -41,8 +40,7 @@ export default function DeleteAccountScreen() {
       return;
     }
 
-    await supabase.auth.signOut();
-    // AuthProvider + route guards navigate to sign-in when session becomes null.
+    await completeAccountDeletion();
   }
 
   return (

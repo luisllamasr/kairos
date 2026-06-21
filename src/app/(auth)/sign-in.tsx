@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -7,7 +7,9 @@ import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
+import { AccountSnapshot } from '@/lib/auth-storage';
 import { otpPending } from '@/lib/otp-pending';
 import { supabase } from '@/lib/supabase';
 
@@ -15,10 +17,34 @@ import { supabase } from '@/lib/supabase';
 // Full validation is handled by Supabase; this only prevents the worst UX cases.
 const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type StoredEmailCheck = 'ok' | 'already_active' | 'already_stored';
+
+function resolveStoredEmail(
+  email: string,
+  sessionEmail: string | undefined,
+  accounts: AccountSnapshot[],
+): StoredEmailCheck {
+  const normalized = email.trim().toLowerCase();
+  if (sessionEmail?.toLowerCase() === normalized) {
+    return 'already_active';
+  }
+  if (accounts.some((account) => account.email.toLowerCase() === normalized)) {
+    return 'already_stored';
+  }
+  return 'ok';
+}
+
 export default function SignInScreen() {
+  const { mode, returnUserId } = useLocalSearchParams<{
+    mode?: string;
+    returnUserId?: string;
+  }>();
+  const isAddAccountMode = mode === 'add-account';
+  const { session, accounts, cancelAddAccount } = useAuth();
   const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Seconds remaining before another OTP request is allowed.
   // When > 0, the button is disabled and a live countdown is shown.
@@ -48,6 +74,21 @@ export default function SignInScreen() {
     return t('auth.signIn.error.generic');
   }
 
+  async function handleCancelAddAccount() {
+    if (!returnUserId || canceling) return;
+
+    setCanceling(true);
+    setError(null);
+    try {
+      const ok = await cancelAddAccount(returnUserId);
+      if (!ok) {
+        setError(t('auth.signIn.addAccount.cancelFailed'));
+      }
+    } finally {
+      setCanceling(false);
+    }
+  }
+
   async function handleSendCode() {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || cooldown > 0) return;
@@ -55,6 +96,16 @@ export default function SignInScreen() {
     // Client-side format check before hitting the network.
     if (!EMAIL_FORMAT.test(trimmed)) {
       setError(t('auth.signIn.error.invalidEmail'));
+      return;
+    }
+
+    const storedCheck = resolveStoredEmail(trimmed, session?.user.email, accounts);
+    if (storedCheck === 'already_active') {
+      setError(t('auth.signIn.error.alreadyActive'));
+      return;
+    }
+    if (storedCheck === 'already_stored') {
+      setError(t('auth.signIn.error.alreadyStored'));
       return;
     }
 
@@ -90,7 +141,7 @@ export default function SignInScreen() {
         {t('auth.signIn.title')}
       </Text>
       <Text variant="subtitle" style={styles.subtitle}>
-        {t('auth.signIn.subtitle')}
+        {isAddAccountMode ? t('auth.signIn.addAccount.subtitle') : t('auth.signIn.subtitle')}
       </Text>
       <Input
         value={email}
@@ -118,8 +169,18 @@ export default function SignInScreen() {
         label={t('auth.signIn.submit')}
         onPress={handleSendCode}
         loading={loading}
-        disabled={cooldown > 0}
+        disabled={cooldown > 0 || canceling}
+        style={styles.submitButton}
       />
+      {isAddAccountMode && returnUserId ? (
+        <Button
+          label={t('auth.signIn.addAccount.cancel')}
+          variant="secondary"
+          onPress={handleCancelAddAccount}
+          loading={canceling}
+          disabled={loading}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -135,6 +196,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   error: {
+    marginBottom: Spacing.sm,
+  },
+  submitButton: {
     marginBottom: Spacing.sm,
   },
 });

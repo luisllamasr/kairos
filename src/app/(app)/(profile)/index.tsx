@@ -9,10 +9,9 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
 import { getAvatarPublicUrl } from '@/lib/profile';
-import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
-  const { profile } = useAuth();
+  const { profile, signOutAccount } = useAuth();
   const { t } = useI18n();
 
   // Each avatar upload writes to a unique timestamped path, so profile.avatar_url
@@ -21,7 +20,7 @@ export default function ProfileScreen() {
   const avatarUri = getAvatarPublicUrl(profile?.avatar_url ?? null);
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await signOutAccount();
   }
 
   return (
@@ -42,6 +41,12 @@ export default function ProfileScreen() {
         label={t('profile.editProfile')}
         onPress={() => router.push('/(app)/(profile)/edit-profile')}
         style={styles.editButton}
+      />
+      <Button
+        label={t('profile.switchAccount')}
+        variant="secondary"
+        onPress={() => router.push('/(app)/(profile)/switch-account')}
+        style={styles.switchButton}
       />
       <Button
         label={t('profile.signOut')}
@@ -72,6 +77,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
   },
   editButton: {
+    marginBottom: Spacing.sm,
+  },
+  switchButton: {
     marginBottom: Spacing.sm,
   },
   signOutButton: {

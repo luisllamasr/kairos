@@ -186,6 +186,7 @@ Completed milestones:
 5. User profile (onboarding, edit profile, avatar upload, tab navigation). ✓
 6. Storage cleanup (pg_net trigger → Edge Function on account deletion). ✓
 7. Self-service account deletion (delete-account Edge Function, confirmation UX). ✓
+8. Multi-account switching (auth vault, switcher UI, add/cancel flows). ✓
 
 Current goal:
 
