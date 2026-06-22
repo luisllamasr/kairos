@@ -187,6 +187,7 @@ Completed milestones:
 6. Storage cleanup (pg_net trigger → Edge Function on account deletion). ✓
 7. Self-service account deletion (delete-account Edge Function, confirmation UX). ✓
 8. Multi-account switching (auth vault, switcher UI, add/cancel flows). ✓
+9. Incomplete signup cleanup (3-day rule, scheduled Edge Function). ✓
 
 Current goal:
 
