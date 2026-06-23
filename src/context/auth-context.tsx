@@ -3,11 +3,14 @@ import { router } from 'expo-router';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import {
-  AccountSnapshot,
   deactivateActiveSessionInVault,
+  forgetAccountOnDevice,
   getStoredSessionJson,
-  listAccountSnapshots,
+  hasStoredSession,
+  listRememberedAccounts,
   persistSessionInVault,
+  purgeSessionFromVault,
+  RememberedAccount,
   removeAccountFromVault,
   setActiveUserInVault,
   setAuthRemoveMode,
@@ -22,40 +25,32 @@ interface AuthContextValue {
   // An incomplete profile (username IS NULL) is NOT null — it is a valid Profile object.
   profile: Profile | null;
   // true when the session exists but the profile fetch failed (network error, DB issue).
-  // Routing must treat this as distinct from an incomplete profile.
-  // Do not route to onboarding on profileError — the user may already have a complete profile.
   profileError: boolean;
   loading: boolean;
-  // Remembered accounts on this device (may include inactive sessions).
-  accounts: AccountSnapshot[];
-  // Call after onboarding completes or when retrying after a profileError.
+  /** Remembered accounts on this device (active sessions and signed-out snapshots). */
+  accounts: RememberedAccount[];
   refreshProfile: () => Promise<void>;
-  // Switch to another remembered account without revoking the current session.
   switchAccount: (userId: string) => Promise<boolean>;
-  // Revoke and remove the current account; auto-switch if others remain.
+  /** Revoke active session tokens; snapshot remains for re-auth. */
   signOutAccount: () => Promise<void>;
-  // Keep current account in vault, open sign-in to add another.
   addAccount: () => Promise<void>;
-  // Restore a stored account and return to the switcher (cancel Add account flow).
+  /** OTP re-auth for a signed-out remembered account. */
+  reauthAccount: (userId: string) => Promise<void>;
   cancelAddAccount: (returnUserId: string) => Promise<boolean>;
-  // Remove deleted account from vault and switch or sign out.
+  /** Remove local remembered data only — not server account deletion. */
+  forgetAccountOnDevice: (userId: string) => Promise<void>;
   completeAccountDeletion: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function refreshAccountsList(): Promise<AccountSnapshot[]> {
-  return listAccountSnapshots();
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState(false);
-  // True once the first session read from storage completes (even when session is null).
   const [authInitialized, setAuthInitialized] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [accounts, setAccounts] = useState<AccountSnapshot[]>([]);
+  const [accounts, setAccounts] = useState<RememberedAccount[]>([]);
   const [authTransitioning, setAuthTransitioning] = useState(false);
 
   const sessionRef = useRef<Session | null>(null);
@@ -64,14 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const syncAccounts = useCallback(async () => {
-    setAccounts(await refreshAccountsList());
+    setAccounts(await listRememberedAccounts());
   }, []);
 
   const activateStoredAccount = useCallback(
     async (userId: string, navigateHome: boolean): Promise<boolean> => {
       const stored = await getStoredSessionJson(userId);
       if (!stored) {
-        await removeAccountFromVault(userId);
         return false;
       }
 
@@ -83,17 +77,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           refresh_token?: string;
         };
         if (!parsed.access_token || !parsed.refresh_token) {
-          await removeAccountFromVault(userId);
+          await purgeSessionFromVault(userId);
           return false;
         }
         accessToken = parsed.access_token;
         refreshToken = parsed.refresh_token;
       } catch {
-        await removeAccountFromVault(userId);
+        await purgeSessionFromVault(userId);
         return false;
       }
 
-      // Point storage at this user before setSession so internal getItem calls succeed.
       await setActiveUserInVault(userId);
 
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
@@ -102,11 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (sessionError || !sessionData.session) {
-        await removeAccountFromVault(userId);
+        await purgeSessionFromVault(userId);
         return false;
       }
 
-      // Apply session synchronously so routing sees it before onAuthStateChange flushes.
       setSession(sessionData.session);
       sessionRef.current = sessionData.session;
       if (navigateHome) {
@@ -117,14 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Effect 1 — auth subscription and server-side session validation.
   useEffect(() => {
     let mounted = true;
 
     syncAccounts();
 
-    // Hydrate from storage before routing — prevents a brief redirect to sign-in
-    // while onAuthStateChange has not fired yet.
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (!mounted) return;
       setSession(initialSession);
@@ -150,10 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { session: invalidSession } } = await supabase.auth.getSession();
         const expiredUserId = invalidSession?.user.id ?? sessionRef.current?.user.id;
         if (expiredUserId) {
-          await removeAccountFromVault(expiredUserId);
+          await purgeSessionFromVault(expiredUserId);
         }
 
-        const remaining = await listAccountSnapshots();
+        const remaining = (await listRememberedAccounts()).filter((a) => a.hasSession);
         for (const account of remaining) {
           if (!mounted) return;
           const ok = await activateStoredAccount(account.userId, false);
@@ -178,7 +167,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [syncAccounts, activateStoredAccount]);
 
-  // Effect 2 — profile fetch, triggered whenever the session changes.
   useEffect(() => {
     let mounted = true;
 
@@ -256,12 +244,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
-      const ok = await activateStoredAccount(userId, true);
-      if (ok) {
-        await syncAccounts();
-      } else {
-        await syncAccounts();
+      if (!(await hasStoredSession(userId))) {
+        return false;
       }
+
+      const ok = await activateStoredAccount(userId, true);
+      await syncAccounts();
       return ok;
     },
     [activateStoredAccount, syncAccounts],
@@ -271,21 +259,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = sessionRef.current?.user.id;
     if (!userId) return;
 
-    const others = (await listAccountSnapshots()).filter((a) => a.userId !== userId);
+    const othersWithSession = (await listRememberedAccounts()).filter(
+      (a) => a.userId !== userId && a.hasSession,
+    );
 
     setAuthTransitioning(true);
     try {
-      setAuthRemoveMode('purge-active');
+      setAuthRemoveMode('purge-session-only');
       await supabase.auth.signOut({ scope: 'global' });
 
-      if (others.length > 0) {
-        await activateStoredAccount(others[0].userId, true);
+      if (othersWithSession.length > 0) {
+        await activateStoredAccount(othersWithSession[0].userId, true);
       }
       await syncAccounts();
     } finally {
       setAuthTransitioning(false);
     }
   }, [activateStoredAccount, syncAccounts]);
+
+  const reauthAccount = useCallback(
+    async (userId: string): Promise<void> => {
+      if (await hasStoredSession(userId)) {
+        await switchAccount(userId);
+        return;
+      }
+
+      const previousUserId = sessionRef.current?.user.id;
+      const returnUserId =
+        previousUserId && previousUserId !== userId ? previousUserId : undefined;
+
+      setAuthTransitioning(true);
+      try {
+        if (previousUserId) {
+          const {
+            data: { session: currentSession },
+          } = await supabase.auth.getSession();
+          if (currentSession) {
+            await persistSessionInVault(currentSession);
+          }
+
+          await deactivateActiveSessionInVault();
+          await supabase.auth.stopAutoRefresh();
+          setSession(null);
+          setProfile(null);
+          setProfileError(false);
+        }
+
+        router.replace({
+          pathname: '/(auth)/sign-in',
+          params: {
+            mode: 'reauth-account',
+            targetUserId: userId,
+            ...(returnUserId ? { returnUserId } : {}),
+          },
+        });
+      } finally {
+        setAuthTransitioning(false);
+      }
+    },
+    [switchAccount],
+  );
 
   const addAccount = useCallback(async () => {
     const previousUserId = sessionRef.current?.user.id;
@@ -300,8 +333,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await persistSessionInVault(currentSession);
       }
 
-      // Do NOT call supabase.auth.signOut() here — even scope: 'local' hits
-      // /logout and revokes refresh tokens while the vault keeps stale ones.
       await deactivateActiveSessionInVault();
       await supabase.auth.stopAutoRefresh();
 
@@ -327,7 +358,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return false;
         }
         await syncAccounts();
-        router.replace('/(app)/(profile)/switch-account', { withAnchor: true });
+        const hasSession = Boolean(sessionRef.current);
+        if (hasSession) {
+          router.replace('/(app)/(profile)/switch-account', { withAnchor: true });
+        } else {
+          router.replace('/(auth)/sign-in');
+        }
         return true;
       } finally {
         setAuthTransitioning(false);
@@ -336,11 +372,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [activateStoredAccount, syncAccounts],
   );
 
+  const forgetAccountOnDeviceHandler = useCallback(
+    async (userId: string): Promise<void> => {
+      if (await hasStoredSession(userId)) {
+        return;
+      }
+
+      await forgetAccountOnDevice(userId);
+      await syncAccounts();
+    },
+    [syncAccounts],
+  );
+
   const completeAccountDeletion = useCallback(async () => {
     const userId = sessionRef.current?.user.id;
     if (!userId) return;
 
-    const others = (await listAccountSnapshots()).filter((a) => a.userId !== userId);
+    const othersWithSession = (await listRememberedAccounts()).filter(
+      (a) => a.userId !== userId && a.hasSession,
+    );
 
     setAuthTransitioning(true);
     try {
@@ -348,8 +398,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthRemoveMode('active-only');
       await supabase.auth.signOut({ scope: 'local' });
 
-      if (others.length > 0) {
-        await activateStoredAccount(others[0].userId, true);
+      if (othersWithSession.length > 0) {
+        await activateStoredAccount(othersWithSession[0].userId, true);
         await syncAccounts();
       } else {
         await syncAccounts();
@@ -372,7 +422,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         switchAccount,
         signOutAccount,
         addAccount,
+        reauthAccount,
         cancelAddAccount,
+        forgetAccountOnDevice: forgetAccountOnDeviceHandler,
         completeAccountDeletion,
       }}
     >

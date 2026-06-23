@@ -13,6 +13,11 @@ export type AccountSnapshot = {
   lastActiveAt: number;
 };
 
+/** Snapshot plus whether a local session exists for this user. */
+export type RememberedAccount = AccountSnapshot & {
+  hasSession: boolean;
+};
+
 type AuthVault = {
   version: 1;
   activeUserId: string | null;
@@ -22,7 +27,7 @@ type AuthVault = {
 };
 
 /** Controls how removeItem behaves when Supabase calls signOut. */
-type RemoveMode = 'purge-active' | 'active-only';
+type RemoveMode = 'purge-active' | 'purge-session-only' | 'active-only';
 
 let removeMode: RemoveMode = 'purge-active';
 
@@ -99,6 +104,37 @@ async function migrateLegacySession(authStorageKey: string, vault: AuthVault): P
 export async function listAccountSnapshots(): Promise<AccountSnapshot[]> {
   const vault = await readVault();
   return Object.values(vault.snapshots).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+}
+
+/** All remembered accounts with local session status (for switcher and sign-in). */
+export async function listRememberedAccounts(): Promise<RememberedAccount[]> {
+  const vault = await readVault();
+  return Object.values(vault.snapshots)
+    .map((snapshot) => ({
+      ...snapshot,
+      hasSession: Boolean(vault.sessions[snapshot.userId]),
+    }))
+    .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+}
+
+export async function hasStoredSession(userId: string): Promise<boolean> {
+  const vault = await readVault();
+  return Boolean(vault.sessions[userId]);
+}
+
+/** Remove local session tokens only — snapshot remains (signed-out remembered account). */
+export async function purgeSessionFromVault(userId: string): Promise<void> {
+  const vault = await readVault();
+  delete vault.sessions[userId];
+  if (vault.activeUserId === userId) {
+    vault.activeUserId = null;
+  }
+  await writeVault(vault);
+}
+
+/** Remove all local data for a user — does not delete the Kairos account on the server. */
+export async function forgetAccountOnDevice(userId: string): Promise<void> {
+  await removeAccountFromVault(userId);
 }
 
 export async function updateAccountSnapshot(
@@ -224,6 +260,9 @@ export function createMultiAccountAuthStorage(authStorageKey: string) {
       removeMode = 'purge-active';
 
       if (mode === 'active-only') {
+        vault.activeUserId = null;
+      } else if (mode === 'purge-session-only' && vault.activeUserId) {
+        delete vault.sessions[vault.activeUserId];
         vault.activeUserId = null;
       } else if (vault.activeUserId) {
         delete vault.sessions[vault.activeUserId];

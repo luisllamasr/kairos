@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -22,9 +22,7 @@ export default function DeleteAccountScreen() {
   const username = profile?.username ?? '';
   const canDelete = confirmText === username;
 
-  async function handleDelete() {
-    if (!canDelete || loading) return;
-
+  async function performDelete() {
     setLoading(true);
     setError(null);
 
@@ -41,6 +39,25 @@ export default function DeleteAccountScreen() {
     }
 
     await completeAccountDeletion();
+  }
+
+  function handleDeletePress() {
+    if (!canDelete || loading) return;
+
+    Alert.alert(
+      t('deleteAccount.finalConfirm.title'),
+      t('deleteAccount.finalConfirm.message'),
+      [
+        { text: t('deleteAccount.finalConfirm.cancel'), style: 'cancel' },
+        {
+          text: t('deleteAccount.finalConfirm.confirm'),
+          style: 'destructive',
+          onPress: () => {
+            void performDelete();
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -77,7 +94,7 @@ export default function DeleteAccountScreen() {
       <Button
         label={t('deleteAccount.submit')}
         variant="destructive"
-        onPress={handleDelete}
+        onPress={handleDeletePress}
         loading={loading}
         disabled={!canDelete}
         style={styles.deleteButton}

@@ -1,18 +1,18 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
-import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
+import { RememberedAccountRow } from '@/components/RememberedAccountRow';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
-import { getAvatarPublicUrl } from '@/lib/profile';
 
 export default function SwitchAccountScreen() {
-  const { session, accounts, switchAccount, addAccount } = useAuth();
+  const { session, accounts, switchAccount, reauthAccount, addAccount, forgetAccountOnDevice } =
+    useAuth();
   const { t } = useI18n();
   const [loadingUserId, setLoadingUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +33,36 @@ export default function SwitchAccountScreen() {
     }
   }
 
+  async function handleLogIn(userId: string) {
+    if (loadingUserId) return;
+    setLoadingUserId(userId);
+    setError(null);
+    try {
+      await reauthAccount(userId);
+    } finally {
+      setLoadingUserId(null);
+    }
+  }
+
+  function confirmRemove(userId: string) {
+    Alert.alert(t('switchAccount.removeConfirm.title'), t('switchAccount.removeConfirm.message'), [
+      { text: t('switchAccount.removeConfirm.cancel'), style: 'cancel' },
+      {
+        text: t('switchAccount.removeFromDevice'),
+        style: 'destructive',
+        onPress: async () => {
+          setLoadingUserId(userId);
+          setError(null);
+          try {
+            await forgetAccountOnDevice(userId);
+          } finally {
+            setLoadingUserId(null);
+          }
+        },
+      },
+    ]);
+  }
+
   return (
     <Screen edges={['top', 'left', 'right']} style={styles.screen}>
       <Text variant="title" style={styles.title}>
@@ -43,36 +73,27 @@ export default function SwitchAccountScreen() {
         {accounts.map((account) => {
           const isActive = account.userId === activeUserId;
           const isLoading = loadingUserId === account.userId;
-          const label =
-            account.display_name ||
-            (account.username ? `@${account.username}` : account.email);
 
           return (
-            <Pressable
+            <RememberedAccountRow
               key={account.userId}
-              style={[styles.row, isActive && styles.rowActive]}
-              onPress={() => handleSwitch(account.userId)}
-              disabled={isActive || loadingUserId !== null}
-            >
-              <Avatar
-                uri={getAvatarPublicUrl(account.avatar_url)}
-                displayName={account.display_name ?? account.username ?? account.email}
-                size={48}
-              />
-              <View style={styles.rowText}>
-                <Text variant="body">{label}</Text>
-                {account.username ? (
-                  <Text variant="caption">@{account.username}</Text>
-                ) : (
-                  <Text variant="caption">{account.email}</Text>
-                )}
-              </View>
-              {isActive ? (
-                <Text variant="caption">{t('switchAccount.active')}</Text>
-              ) : isLoading ? (
-                <Text variant="caption">{t('switchAccount.switching')}</Text>
-              ) : null}
-            </Pressable>
+              account={account}
+              isActive={isActive}
+              isLoading={isLoading}
+              disabled={loadingUserId !== null && !isLoading}
+              onPress={
+                account.hasSession && !isActive
+                  ? () => handleSwitch(account.userId)
+                  : undefined
+              }
+              onLogIn={!account.hasSession ? () => handleLogIn(account.userId) : undefined}
+              showRemove={!account.hasSession}
+              onRemove={
+                !account.hasSession
+                  ? () => confirmRemove(account.userId)
+                  : undefined
+              }
+            />
           );
         })}
       </View>
@@ -109,22 +130,7 @@ const styles = StyleSheet.create({
   },
   list: {
     marginBottom: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: 8,
-  },
-  rowActive: {
-    opacity: 0.85,
-  },
-  rowText: {
-    flex: 1,
-    gap: Spacing.xs,
   },
   error: {
     marginBottom: Spacing.sm,

@@ -9,6 +9,11 @@ export const es: Record<TranslationKey, string> = {
   'auth.signIn.error.invalidEmail': 'Introduce una dirección de correo válida.',
   'auth.signIn.error.alreadyActive': 'Esta cuenta ya está activa en este dispositivo.',
   'auth.signIn.error.alreadyStored': 'Esta cuenta ya está en este dispositivo.',
+  'auth.signIn.error.alreadySignedIn':
+    'Esta cuenta ya tiene sesión iniciada en este dispositivo. Cambia de cuenta desde Perfil.',
+  'auth.signIn.reauth.subtitle': 'Vuelve a iniciar sesión como {{name}}.',
+  'auth.signIn.remembered.title': 'Recordadas en este dispositivo',
+  'auth.signIn.remembered.orEmail': 'O inicia sesión con correo',
   'auth.signIn.addAccount.subtitle': 'Inicia sesión con otro correo para agregarlo a este dispositivo.',
   'auth.signIn.addAccount.cancel': 'Cancelar',
   'auth.signIn.addAccount.cancelFailed':
@@ -67,16 +72,28 @@ export const es: Record<TranslationKey, string> = {
   'deleteAccount.confirmPrompt': 'Escribe tu nombre de usuario (@{{username}}) para confirmar:',
   'deleteAccount.submit': 'Eliminar mi cuenta',
   'deleteAccount.cancel': 'Cancelar',
+  'deleteAccount.finalConfirm.title': '¿Eliminar tu cuenta?',
+  'deleteAccount.finalConfirm.message':
+    'Esto elimina permanentemente tu cuenta de Kairos, perfil y avatar. No se puede deshacer.',
+  'deleteAccount.finalConfirm.confirm': 'Eliminar mi cuenta',
+  'deleteAccount.finalConfirm.cancel': 'Conservar',
   'deleteAccount.error.unauthorized': 'Tu sesión expiró. Por favor, inicia sesión de nuevo.',
   'deleteAccount.error.failed': 'No se pudo eliminar tu cuenta. Por favor, inténtalo de nuevo.',
 
   'switchAccount.title': 'Cambiar Cuenta',
   'switchAccount.active': 'Activa',
+  'switchAccount.signedOut': 'Sesión cerrada',
+  'switchAccount.logIn': 'Iniciar sesión',
   'switchAccount.switching': 'Cambiando…',
   'switchAccount.addAccount': 'Agregar cuenta',
   'switchAccount.cancel': 'Cancelar',
+  'switchAccount.removeFromDevice': 'Quitar de este dispositivo',
+  'switchAccount.removeConfirm.title': '¿Quitar de este dispositivo?',
+  'switchAccount.removeConfirm.message':
+    'Esto solo quita la cuenta de este dispositivo. Tu cuenta de Kairos no se elimina.',
+  'switchAccount.removeConfirm.cancel': 'Conservar',
   'switchAccount.error.failed':
-    'No se pudo cambiar a esa cuenta. Puede haber expirado — inicia sesión de nuevo.',
+    'No pudimos cambiar a esa cuenta. Intenta iniciar sesión de nuevo.',
 
   'search.title': 'Encontrar personas',
   'search.subtitle': 'Busca usuarios de Kairos por nombre de usuario.',

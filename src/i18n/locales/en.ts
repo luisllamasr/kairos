@@ -7,6 +7,11 @@ export const en = {
   'auth.signIn.error.invalidEmail': 'Please enter a valid email address.',
   'auth.signIn.error.alreadyActive': 'This account is already active on this device.',
   'auth.signIn.error.alreadyStored': 'This account is already on this device.',
+  'auth.signIn.error.alreadySignedIn':
+    'This account is already signed in on this device. Switch accounts from Profile.',
+  'auth.signIn.reauth.subtitle': 'Sign back in as {{name}}.',
+  'auth.signIn.remembered.title': 'Remembered on this device',
+  'auth.signIn.remembered.orEmail': 'Or sign in with email',
   'auth.signIn.addAccount.subtitle': 'Sign in with another email to add it to this device.',
   'auth.signIn.addAccount.cancel': 'Cancel',
   'auth.signIn.addAccount.cancelFailed':
@@ -66,15 +71,27 @@ export const en = {
   'deleteAccount.confirmPrompt': 'Type your username (@{{username}}) to confirm:',
   'deleteAccount.submit': 'Delete my account',
   'deleteAccount.cancel': 'Cancel',
+  'deleteAccount.finalConfirm.title': 'Delete your account?',
+  'deleteAccount.finalConfirm.message':
+    'This permanently deletes your Kairos account, profile, and avatar. This cannot be undone.',
+  'deleteAccount.finalConfirm.confirm': 'Delete my account',
+  'deleteAccount.finalConfirm.cancel': 'Keep',
   'deleteAccount.error.unauthorized': 'Your session expired. Please sign in again.',
   'deleteAccount.error.failed': 'Could not delete your account. Please try again.',
 
   'switchAccount.title': 'Switch Account',
   'switchAccount.active': 'Active',
+  'switchAccount.signedOut': 'Signed out',
+  'switchAccount.logIn': 'Log in',
   'switchAccount.switching': 'Switching…',
   'switchAccount.addAccount': 'Add account',
   'switchAccount.cancel': 'Cancel',
-  'switchAccount.error.failed': 'Could not switch to that account. It may have expired — sign in again.',
+  'switchAccount.removeFromDevice': 'Remove from this device',
+  'switchAccount.removeConfirm.title': 'Remove from this device?',
+  'switchAccount.removeConfirm.message':
+    'This removes the account from this device only. Your Kairos account is not deleted.',
+  'switchAccount.removeConfirm.cancel': 'Keep',
+  'switchAccount.error.failed': 'Could not switch to that account. Try signing in again.',
 
   'search.title': 'Find people',
   'search.subtitle': 'Search Kairos users by username.',
