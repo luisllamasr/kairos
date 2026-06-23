@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 
+import { BootstrapScreen } from '@/components/BootstrapScreen';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
@@ -10,7 +11,7 @@ export default function AppLayout() {
   const { t } = useI18n();
   const colors = useTheme();
 
-  if (loading) return null;
+  if (loading) return <BootstrapScreen />;
   if (!session) return <Redirect href="/(auth)/sign-in" />;
 
   // Only redirect to onboarding when the profile loaded successfully and is incomplete.
@@ -22,6 +23,7 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: colors.background },
         tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.textDisabled,
         tabBarStyle: {

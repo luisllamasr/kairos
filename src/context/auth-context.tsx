@@ -52,7 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // True once the first session read from storage completes (even when session is null).
+  const [authInitialized, setAuthInitialized] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [accounts, setAccounts] = useState<AccountSnapshot[]>([]);
   const [authTransitioning, setAuthTransitioning] = useState(false);
 
@@ -121,11 +123,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     syncAccounts();
 
+    // Hydrate from storage before routing — prevents a brief redirect to sign-in
+    // while onAuthStateChange has not fired yet.
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!mounted) return;
+      setSession(initialSession);
+      setAuthInitialized(true);
+    });
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
+      if (event === 'INITIAL_SESSION') {
+        setAuthInitialized(true);
+      }
       if (newSession) {
         syncAccounts();
       }
@@ -169,14 +182,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    if (!authInitialized) return;
+
     if (!session) {
       setProfile(null);
       setProfileError(false);
-      setLoading(false);
+      setProfileLoading(false);
       return;
     }
 
-    setLoading(true);
+    setProfileLoading(true);
     setProfileError(false);
 
     supabase
@@ -184,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('id', session.user.id)
       .single()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (!mounted) return;
 
         if (error) {
@@ -193,21 +208,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(data);
           setProfileError(false);
-          void updateAccountSnapshot(session.user.id, {
+          await updateAccountSnapshot(session.user.id, {
             email: session.user.email ?? '',
             username: data.username,
             display_name: data.display_name,
             avatar_url: data.avatar_url,
-          }).then(syncAccounts);
+          });
+          if (mounted) await syncAccounts();
         }
 
-        setLoading(false);
+        if (mounted) setProfileLoading(false);
       });
 
     return () => {
       mounted = false;
     };
-  }, [session, syncAccounts]);
+  }, [session, authInitialized, syncAccounts]);
 
   const refreshProfile = useCallback(async () => {
     const currentSession = sessionRef.current;
@@ -350,7 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         profileError,
-        loading: loading || authTransitioning,
+        loading: !authInitialized || profileLoading || authTransitioning,
         accounts,
         refreshProfile,
         switchAccount,

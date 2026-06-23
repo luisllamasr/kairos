@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
+import { BootstrapScreen } from '@/components/BootstrapScreen';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -12,7 +13,7 @@ export default function RootIndex() {
   const { session, profile, profileError, loading, refreshProfile } = useAuth();
   const { t } = useI18n();
 
-  if (loading) return null;
+  if (loading) return <BootstrapScreen />;
 
   if (!session) return <Redirect href="/(auth)/sign-in" />;
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ViewStyle } from 'react-native';
 
@@ -30,6 +31,17 @@ export function Avatar({
   const badgeSize = Math.round(size * 0.3);
   const radius = size / 2;
 
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [uri]);
+
+  const showImage = Boolean(uri) && !failed;
+  const showPlaceholder = !uri || !loaded || failed;
+
   return (
     <TouchableOpacity
       style={[{ width: size, height: size }, style]}
@@ -37,24 +49,34 @@ export function Avatar({
       disabled={!onPress}
       activeOpacity={onPress ? 0.7 : 1}
     >
-      {uri ? (
-        <Image
-          source={{ uri }}
-          style={{ width: size, height: size, borderRadius: radius }}
-          resizeMode="cover"
-        />
-      ) : (
-        <View
-          style={[
-            styles.placeholder,
-            { width: size, height: size, borderRadius: radius, backgroundColor: colors.border },
-          ]}
-        >
-          <Text style={{ color: colors.textSecondary, fontSize: size * 0.38, fontWeight: '600' }}>
-            {initial}
-          </Text>
-        </View>
-      )}
+      <View style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden' }}>
+        {showPlaceholder && (
+          <View
+            style={[
+              styles.placeholder,
+              StyleSheet.absoluteFill,
+              { borderRadius: radius, backgroundColor: colors.border },
+            ]}
+          >
+            <Text style={{ color: colors.textSecondary, fontSize: size * 0.38, fontWeight: '600' }}>
+              {initial}
+            </Text>
+          </View>
+        )}
+
+        {showImage && (
+          <Image
+            source={{ uri: uri! }}
+            style={[
+              StyleSheet.absoluteFill,
+              { borderRadius: radius, opacity: loaded ? 1 : 0 },
+            ]}
+            resizeMode="cover"
+            onLoad={() => setLoaded(true)}
+            onError={() => setFailed(true)}
+          />
+        )}
+      </View>
 
       {showEditBadge && (
         <View
