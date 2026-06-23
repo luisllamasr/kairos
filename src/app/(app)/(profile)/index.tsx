@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
@@ -8,20 +9,36 @@ import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
+import { listIncomingFriendRequests } from '@/lib/friendships';
 import { getAvatarPublicUrl } from '@/lib/profile';
 
 export default function ProfileScreen() {
   const { profile, signOutAccount } = useAuth();
   const { t } = useI18n();
+  const [incomingRequestCount, setIncomingRequestCount] = useState(0);
 
-  // Each avatar upload writes to a unique timestamped path, so profile.avatar_url
-  // changes after every save. The CDN URL naturally points to a new resource —
-  // no cache-busting query params needed.
   const avatarUri = getAvatarPublicUrl(profile?.avatar_url ?? null);
+
+  const loadIncomingRequestCount = useCallback(async () => {
+    const { data, error } = await listIncomingFriendRequests();
+    if (error) return;
+    setIncomingRequestCount(data.length);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadIncomingRequestCount();
+    }, [loadIncomingRequestCount]),
+  );
 
   async function handleSignOut() {
     await signOutAccount();
   }
+
+  const friendRequestsLabel =
+    incomingRequestCount > 0
+      ? t('profile.friendRequestsWithCount', { count: String(incomingRequestCount) })
+      : t('profile.friendRequests');
 
   return (
     <Screen centered edges={['top', 'left', 'right']}>
@@ -40,19 +57,31 @@ export default function ProfileScreen() {
       <Button
         label={t('profile.editProfile')}
         onPress={() => router.push('/(app)/(profile)/edit-profile')}
-        style={styles.editButton}
+        style={styles.socialButton}
+      />
+      <Button
+        label={t('profile.friends')}
+        variant="secondary"
+        onPress={() => router.push('/(app)/(profile)/friends')}
+        style={styles.socialButton}
+      />
+      <Button
+        label={friendRequestsLabel}
+        variant="secondary"
+        onPress={() => router.push('/(app)/(profile)/friend-requests')}
+        style={styles.socialButton}
       />
       <Button
         label={t('profile.switchAccount')}
         variant="secondary"
         onPress={() => router.push('/(app)/(profile)/switch-account')}
-        style={styles.switchButton}
+        style={styles.socialButton}
       />
       <Button
         label={t('profile.signOut')}
         variant="secondary"
         onPress={handleSignOut}
-        style={styles.signOutButton}
+        style={styles.socialButton}
       />
       <Button
         label={t('profile.deleteAccount')}
@@ -76,13 +105,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.xxl,
   },
-  editButton: {
-    marginBottom: Spacing.sm,
-  },
-  switchButton: {
-    marginBottom: Spacing.sm,
-  },
-  signOutButton: {
+  socialButton: {
     marginBottom: Spacing.sm,
   },
 });

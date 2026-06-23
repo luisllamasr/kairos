@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -10,9 +10,17 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
+import {
+  acceptFriendRequest,
+  cancelFriendRequest,
+  declineFriendRequest,
+  removeFriend,
+  sendFriendRequest,
+} from '@/lib/friendships';
 import { getAvatarPublicUrl } from '@/lib/profile';
 import { getPublicProfile } from '@/lib/users';
-import { PublicProfile } from '@/types/public-profile';
+import { PublicProfileWithRelationship } from '@/types/public-profile';
+import { RelationshipStatus } from '@/types/relationship';
 
 export default function PublicProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
@@ -20,10 +28,12 @@ export default function PublicProfileScreen() {
   const { t } = useI18n();
   const colors = useTheme();
 
-  const [publicProfile, setPublicProfile] = useState<PublicProfile | null>(null);
+  const [publicProfile, setPublicProfile] = useState<PublicProfileWithRelationship | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!username || typeof username !== 'string') {
@@ -35,6 +45,7 @@ export default function PublicProfileScreen() {
     setLoading(true);
     setError(false);
     setNotFound(false);
+    setActionError(false);
 
     const { data, error: loadError } = await getPublicProfile(username);
 
@@ -60,6 +71,125 @@ export default function PublicProfileScreen() {
   );
 
   const avatarUri = getAvatarPublicUrl(publicProfile?.avatar_url ?? null);
+  const relationshipStatus: RelationshipStatus = publicProfile?.relationship_status ?? 'none';
+
+  async function runFriendshipAction(action: () => Promise<{ ok: boolean; error: boolean }>) {
+    if (!publicProfile) return;
+
+    setActionLoading(true);
+    setActionError(false);
+
+    const result = await action();
+    if (result.error) {
+      setActionLoading(false);
+      setActionError(true);
+      return;
+    }
+
+    await loadProfile();
+    setActionLoading(false);
+  }
+
+  function handleAddFriend() {
+    if (!publicProfile) return;
+    void runFriendshipAction(() => sendFriendRequest(publicProfile.username));
+  }
+
+  function handleAcceptRequest() {
+    if (!publicProfile) return;
+    void runFriendshipAction(() => acceptFriendRequest(publicProfile.username));
+  }
+
+  function handleDeclineRequest() {
+    if (!publicProfile) return;
+    void runFriendshipAction(() => declineFriendRequest(publicProfile.username));
+  }
+
+  function handleCancelRequest() {
+    if (!publicProfile) return;
+    void runFriendshipAction(() => cancelFriendRequest(publicProfile.username));
+  }
+
+  function handleRemoveFriend() {
+    if (!publicProfile || actionLoading) return;
+
+    Alert.alert(t('publicProfile.removeFriend.title'), t('publicProfile.removeFriend.message'), [
+      { text: t('publicProfile.removeFriend.cancel'), style: 'cancel' },
+      {
+        text: t('publicProfile.removeFriend.confirm'),
+        style: 'destructive',
+        onPress: () => {
+          void runFriendshipAction(() => removeFriend(publicProfile.username));
+        },
+      },
+    ]);
+  }
+
+  function renderFriendshipActions() {
+    if (!publicProfile || isSelf) return null;
+
+    switch (relationshipStatus) {
+      case 'none':
+        return (
+          <Button
+            label={t('publicProfile.addFriend')}
+            onPress={handleAddFriend}
+            loading={actionLoading}
+            style={styles.actionButton}
+          />
+        );
+      case 'pending_outgoing':
+        return (
+          <View style={styles.actionGroup}>
+            <Text variant="body" style={styles.centeredText}>
+              {t('publicProfile.requestSent')}
+            </Text>
+            <Button
+              label={t('publicProfile.cancelRequest')}
+              variant="secondary"
+              onPress={handleCancelRequest}
+              loading={actionLoading}
+              style={styles.actionButton}
+            />
+          </View>
+        );
+      case 'pending_incoming':
+        return (
+          <View style={styles.actionGroup}>
+            <Button
+              label={t('publicProfile.acceptRequest')}
+              onPress={handleAcceptRequest}
+              loading={actionLoading}
+              style={styles.actionButton}
+            />
+            <Button
+              label={t('publicProfile.declineRequest')}
+              variant="secondary"
+              onPress={handleDeclineRequest}
+              disabled={actionLoading}
+              style={styles.actionButton}
+            />
+          </View>
+        );
+      case 'friends':
+        return (
+          <View style={styles.actionGroup}>
+            <Text variant="body" style={styles.centeredText}>
+              {t('publicProfile.friends')}
+            </Text>
+            <Button
+              label={t('publicProfile.removeFriend')}
+              variant="secondary"
+              onPress={handleRemoveFriend}
+              loading={actionLoading}
+              style={styles.actionButton}
+            />
+          </View>
+        );
+      default:
+        return null;
+    }
+  }
 
   return (
     <Screen edges={['top', 'left', 'right']}>
@@ -121,7 +251,13 @@ export default function PublicProfileScreen() {
             </View>
           )}
 
-          {/* Milestone 11: Follow / unfollow action */}
+          {renderFriendshipActions()}
+
+          {actionError && (
+            <Text variant="error" style={styles.actionError}>
+              {t('publicProfile.actionError')}
+            </Text>
+          )}
         </View>
       )}
     </Screen>
@@ -160,7 +296,7 @@ const styles = StyleSheet.create({
   },
   username: {
     textAlign: 'center',
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.xl,
   },
   selfBlock: {
     width: '100%',
@@ -169,5 +305,17 @@ const styles = StyleSheet.create({
   },
   goProfileButton: {
     marginTop: Spacing.sm,
+  },
+  actionGroup: {
+    width: '100%',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  actionButton: {
+    alignSelf: 'stretch',
+  },
+  actionError: {
+    marginTop: Spacing.md,
+    textAlign: 'center',
   },
 });

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
-import { PublicProfile } from '@/types/public-profile';
+import { PublicProfile, PublicProfileWithRelationship } from '@/types/public-profile';
+import { parseRelationshipStatus } from '@/types/relationship';
 
 export const USERNAME_SEARCH_MIN_LENGTH = 3;
 
@@ -27,7 +28,7 @@ export async function searchProfiles(
 
 export async function getPublicProfile(
   username: string,
-): Promise<{ data: PublicProfile | null; error: boolean }> {
+): Promise<{ data: PublicProfileWithRelationship | null; error: boolean }> {
   const normalized = normalizeUsernameQuery(username);
   if (!normalized) return { data: null, error: false };
 
@@ -36,6 +37,17 @@ export async function getPublicProfile(
   });
 
   if (error) return { data: null, error: true };
-  const rows = (data ?? []) as PublicProfile[];
-  return { data: rows[0] ?? null, error: false };
+  const rows = (data ?? []) as Array<PublicProfileWithRelationship & { relationship_status: unknown }>;
+  const row = rows[0];
+  if (!row) return { data: null, error: false };
+
+  return {
+    data: {
+      username: row.username,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+      relationship_status: parseRelationshipStatus(row.relationship_status),
+    },
+    error: false,
+  };
 }

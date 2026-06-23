@@ -76,13 +76,13 @@ They are not designed around likes or popularity.
 
 Kairos has a social layer — but it is not the product center.
 
-Users can eventually follow people, discover public experiences, and get inspiration from others.
+Users can connect with friends, discover public experiences, and get inspiration from others.
 
 The social graph exists to support real life: finding people, planning together, remembering shared moments.
 
 Kairos does not try to replace Instagram or traditional social networks.
 
-**Anti-drift rule:** Do not build feeds, recommendations, suggested users, DMs, or profile bloat unless they directly serve experiences and memories. When user discovery, public profiles, and follow relationships exist, treat the **social foundation as complete** and return focus to the core domain.
+**Anti-drift rule:** Do not build feeds, recommendations, suggested users, DMs, or profile bloat unless they directly serve experiences and memories. When user discovery, public profiles, and friend relationships exist, treat the **social foundation as complete** and return focus to the core domain.
 
 ---
 
@@ -186,6 +186,7 @@ Completed milestones:
 8. Multi-account switching (auth vault, switcher UI, add/cancel flows). ✓
 9. Incomplete signup cleanup (3-day rule, scheduled Edge Function). ✓
 10. Social user discovery (Search tab, global user search, public profiles, RLS/RPC). ✓
+11. Friend relationships (mutual friendships, requests, Profile friends list). ✓
 
 ---
 
@@ -197,47 +198,93 @@ Build order is intentional. Do not skip ahead into full social-network features 
 
 Authentication, onboarding, profiles, avatars, account deletion, multi-account switching, incomplete signup cleanup.
 
-## Phase B — Social foundation (in progress)
+## Phase B — Social foundation (complete)
 
-Minimal graph-building before shared experiences. Purpose: **search → view profile → follow** — not a feed, not content discovery.
+Minimal graph-building before shared experiences. Purpose: **search → view profile → friend request → mutual friendship** — not a feed, not content discovery.
 
 | Milestone | Scope | In | Out |
 |-----------|--------|-----|-----|
 | **10. Social user discovery** ✓ | Search tab, global `@username` search, public profile screen, RLS/RPC foundation | Prefix search, public profile (avatar, display name, username), incomplete profiles hidden from discovery | Feed, recommendations, suggested users, Discover content, participant picker, bio/stats, DMs |
-| **11. Follow relationships** *(next)* | Follow/unfollow on public profile; optional thin following list | Asymmetric follow, RLS on `follows` table | Home feed, follower counts as product focus, mutual friends complexity |
+| **11. Friend relationships** ✓ | Mutual friendships on public profile; friends list; incoming requests | Friend request / accept / decline / cancel; remove friend with confirm; 60-day pending expiry; simultaneous auto-accept | Asymmetric follows, home feed, follower counts, mutual-friends ranking, DMs |
 
-**Navigation (milestone 10):** Third tab **Search** — global people discovery. Not buried in Profile (Profile = identity and account only).
+**Navigation (milestone 10):** Third tab **Search** — global people discovery. Not buried in Profile (Profile = identity, friends, and account).
+
+**Relationship model (milestone 11):**
+
+- One `friendships` row per user pair (canonical UUID ordering).
+- `pending` = unresolved request (temporary); `accepted` = mutual friends.
+- Declining deletes the row — no `declined` status.
+- Pending requests expire after **60 days** (scheduled job).
+- Simultaneous requests auto-accept.
+- Writes via SECURITY DEFINER RPCs; reads via INVOKER RPCs + RLS SELECT on own rows.
 
 **Two search concepts — do not merge:**
 
-- **Global user search** (Search tab): find anyone on Kairos; social graph building.
-- **Participant picker** (later, inside experience creation): choose from people you already follow — not open search.
+- **Global user search** (Search tab): find anyone on Kairos; start a friend request.
+- **Participant picker** (later, inside experience creation): choose from **friends** — not open search.
 
 **Incomplete profiles:** Users who have not finished onboarding cannot enter the app. Their profiles are never discoverable by others (RLS + RPC). Only the owner reads their own incomplete row for routing.
 
 When milestones 10 and 11 are done, **stop expanding the social layer** unless a core-domain feature requires it.
 
-## Phase C — Core domain (next after social foundation)
+## Phase C — Core domain (next)
 
 | Milestone | Scope |
 |-----------|--------|
 | **12. Experiences** | Create and manage experiences; `visibility` from day one (private first) |
 | **13. Memories** | Photos and personal timeline linked to experiences |
-| **14. Shared experiences** | Participants — picker draws from **follows**, not global search |
+| **14. Shared experiences** | Participants — picker draws from **friends**, not global search |
 
 ## Phase D — Community inspiration (later)
 
-Public experiences, Discover tab content (experiences, ideas), optional feed of public content from people you follow. Follows and visibility enums plug in here — not before core domain exists.
+Public experiences, Discover tab content (experiences, ideas), optional feed of public content from friends or public visibility. Friendships and visibility enums plug in here — not before core domain exists.
 
 ```text
-Identity ✓ → Search + public profile → Follows → Experiences → Memories → Participants → Discover/feed
+Identity ✓ → Search + public profile → Friends → Experiences → Memories → Participants → Discover/feed
 ```
 
 ---
 
 Current goal:
 
-**Milestone 11 — Follow relationships** (follow/unfollow on public profile).
+**Milestone 12 — Experiences** (create and manage experiences; visibility from day one).
+
+---
+
+# Milestone 11 — manual validation checklist
+
+Run after applying migration `20260623100000_friend_relationships.sql` to linked Supabase.
+
+**Friend request flow**
+
+- [ ] User A finds User B via Search → opens public profile → **Add friend** → A sees “Request sent”
+- [ ] User B sees incoming request on Profile → Friend requests → Accept
+- [ ] Both see **You are friends** on public profile; B appears in A’s Friends list and vice versa
+
+**Decline / cancel**
+
+- [ ] B declines incoming request → row deleted; A sees **Add friend** again
+- [ ] A cancels outgoing request → row deleted; A sees **Add friend** again
+
+**Simultaneous requests**
+
+- [ ] A sends request to B; B sends request to A before accepting → both become friends (auto-accept)
+
+**Remove friend**
+
+- [ ] Either user taps **Remove friend** → confirm dialog → friendship removed on both sides
+
+**Edge cases**
+
+- [ ] Own public profile shows self message — no friend actions
+- [ ] Incomplete / unknown username → not found (unchanged from milestone 10)
+- [ ] Switch account → relationship status reflects active session
+- [ ] Delete account → friendship rows involving that user are gone (CASCADE)
+
+**Regression**
+
+- [ ] Search still works
+- [ ] Profile edit, switch account, sign out unchanged
 
 ---
 
@@ -248,7 +295,7 @@ When helping with Kairos:
 - Always understand the product before coding.
 - Follow the **Roadmap** section — social foundation is small and bounded; core domain is experiences and memories.
 - Do not build feeds, recommendations, suggested users, or Discover content during milestones 10–11.
-- Do not conflate global user search (Search tab) with the experience participant picker (follows only, later).
+- Do not conflate global user search (Search tab) with the experience participant picker (friends only, later).
 - Do not blindly generate files.
 - Explain architectural decisions.
 - Suggest improvements if something does not scale.
