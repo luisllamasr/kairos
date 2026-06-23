@@ -23,6 +23,7 @@ export const es: Record<TranslationKey, string> = {
   'auth.verify.changeEmail': 'Usar un correo diferente',
 
   'tab.home': 'Inicio',
+  'tab.search': 'Buscar',
   'tab.profile': 'Perfil',
 
   'home.comingSoon': 'Las experiencias llegan pronto.',
@@ -76,6 +77,21 @@ export const es: Record<TranslationKey, string> = {
   'switchAccount.cancel': 'Cancelar',
   'switchAccount.error.failed':
     'No se pudo cambiar a esa cuenta. Puede haber expirado — inicia sesión de nuevo.',
+
+  'search.title': 'Encontrar personas',
+  'search.subtitle': 'Busca usuarios de Kairos por nombre de usuario.',
+  'search.placeholder': 'Buscar @usuario',
+  'search.minLength': 'Introduce al menos 3 caracteres.',
+  'search.noResults': 'No se encontraron usuarios.',
+  'search.error': 'No se pudo buscar. Por favor, inténtalo de nuevo.',
+
+  'publicProfile.notFound': 'Usuario no encontrado',
+  'publicProfile.notFoundHint':
+    'Este nombre de usuario puede no existir o el registro puede estar incompleto.',
+  'publicProfile.isSelf': 'Este es tu perfil.',
+  'publicProfile.goToProfile': 'Ir a la pestaña Perfil',
+  'publicProfile.loadError': 'No se pudo cargar este perfil. Por favor, inténtalo de nuevo.',
+  'publicProfile.back': 'Atrás',
 
   'error.profileLoad': 'No se pudo cargar tu perfil',
   'error.retry': 'Reintentar',

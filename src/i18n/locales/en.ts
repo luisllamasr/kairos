@@ -21,6 +21,7 @@ export const en = {
   'auth.verify.changeEmail': 'Use a different email',
 
   'tab.home': 'Home',
+  'tab.search': 'Search',
   'tab.profile': 'Profile',
 
   'home.comingSoon': 'Experiences are coming soon.',
@@ -74,6 +75,20 @@ export const en = {
   'switchAccount.addAccount': 'Add account',
   'switchAccount.cancel': 'Cancel',
   'switchAccount.error.failed': 'Could not switch to that account. It may have expired — sign in again.',
+
+  'search.title': 'Find people',
+  'search.subtitle': 'Search Kairos users by username.',
+  'search.placeholder': 'Search @username',
+  'search.minLength': 'Enter at least 3 characters.',
+  'search.noResults': 'No users found.',
+  'search.error': 'Could not search. Please try again.',
+
+  'publicProfile.notFound': 'User not found',
+  'publicProfile.notFoundHint': 'This username may not exist or onboarding may not be complete.',
+  'publicProfile.isSelf': 'This is your profile.',
+  'publicProfile.goToProfile': 'Go to Profile tab',
+  'publicProfile.loadError': 'Could not load this profile. Please try again.',
+  'publicProfile.back': 'Back',
 
   'error.profileLoad': 'Could not load your profile',
   'error.retry': 'Try again',
