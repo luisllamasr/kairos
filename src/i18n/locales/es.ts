@@ -31,7 +31,60 @@ export const es: Record<TranslationKey, string> = {
   'tab.search': 'Buscar',
   'tab.profile': 'Perfil',
 
-  'home.comingSoon': 'Las experiencias llegan pronto.',
+  'home.plansTitle': 'Tus planes',
+  'home.plansSubtitle': 'Momentos reales que piensas vivir.',
+  'home.newExperience': 'Nueva experiencia',
+  'home.empty': 'Aún no tienes planes.',
+  'home.emptyHint': 'Planea algo que merezca ser recordado.',
+  'home.loadError': 'No se pudieron cargar tus planes. Por favor, inténtalo de nuevo.',
+
+  'experiences.back': 'Atrás',
+  'experiences.title.placeholder': '¿Qué estás planeando?',
+  'experiences.description.placeholder': 'Descripción (opcional)',
+  'experiences.location.placeholder': 'Ubicación (opcional)',
+  'experiences.startsAt.label': 'Empieza',
+  'experiences.endsAt.label': 'Termina',
+  'experiences.endsAt.hint':
+    '¿Cuándo termina? Da tu mejor estimación — esto ayuda a Kairos a crear tu recuerdo.',
+  'experiences.dateTime.done': 'Listo',
+  'experiences.dateTime.cancel': 'Cancelar',
+  'experiences.form.cancel': 'Cancelar',
+  'experiences.status.cancelled': 'Cancelado',
+
+  'experiences.create.title': 'Nueva experiencia',
+  'experiences.create.submit': 'Crear plan',
+
+  'experiences.edit.title': 'Editar plan',
+  'experiences.edit.submit': 'Guardar cambios',
+
+  'experiences.detail.transformNotice':
+    'Cuando termine tu plan, Kairos creará un recuerdo automáticamente.',
+  'experiences.detail.endedNotice':
+    'Este plan ha terminado. Tu recuerdo llegará en la próxima actualización.',
+  'experiences.detail.edit': 'Editar plan',
+  'experiences.detail.cancelPlan': 'Cancelar plan',
+  'experiences.detail.remove': 'Quitar plan',
+
+  'experiences.cancelConfirm.title': '¿Cancelar este plan?',
+  'experiences.cancelConfirm.message':
+    'Este plan ya no ocurrirá. Seguirá visible hasta poco después de la hora prevista.',
+  'experiences.cancelConfirm.confirm': 'Cancelar plan',
+  'experiences.cancelConfirm.keep': 'Conservar plan',
+
+  'experiences.removeConfirm.title': '¿Quitar este plan?',
+  'experiences.removeConfirm.message':
+    'Esto quita el plan de tu Kairos. Ya no lo verás en tus planes.',
+  'experiences.removeConfirm.confirm': 'Quitar plan',
+  'experiences.removeConfirm.keep': 'Conservar plan',
+
+  'experiences.error.create': 'No se pudo crear tu plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.update': 'No se pudo actualizar tu plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.load': 'No se pudo cargar este plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.cancel': 'No se pudo cancelar este plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.remove': 'No se pudo quitar este plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.invalidDates': 'La hora de fin debe ser posterior al inicio.',
+  'experiences.error.titleRequired': 'Por favor, introduce un título.',
+  'experiences.error.notUpcoming': 'Este plan ya no se puede editar.',
 
   'profile.username.rules.length': '· 3–30 caracteres',
   'profile.username.rules.chars': '· Solo letras minúsculas, números, . _ y -',

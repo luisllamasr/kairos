@@ -29,7 +29,60 @@ export const en = {
   'tab.search': 'Search',
   'tab.profile': 'Profile',
 
-  'home.comingSoon': 'Experiences are coming soon.',
+  'home.plansTitle': 'Your plans',
+  'home.plansSubtitle': 'Real moments you intend to live.',
+  'home.newExperience': 'New experience',
+  'home.empty': 'No upcoming plans yet.',
+  'home.emptyHint': 'Plan something worth remembering.',
+  'home.loadError': 'Could not load your plans. Please try again.',
+
+  'experiences.back': 'Back',
+  'experiences.title.placeholder': 'What are you planning?',
+  'experiences.description.placeholder': 'Description (optional)',
+  'experiences.location.placeholder': 'Location (optional)',
+  'experiences.startsAt.label': 'Starts',
+  'experiences.endsAt.label': 'Ends',
+  'experiences.endsAt.hint':
+    'When does this end? Give your best estimate — this helps Kairos create your memory.',
+  'experiences.dateTime.done': 'Done',
+  'experiences.dateTime.cancel': 'Cancel',
+  'experiences.form.cancel': 'Cancel',
+  'experiences.status.cancelled': 'Cancelled',
+
+  'experiences.create.title': 'New experience',
+  'experiences.create.submit': 'Create plan',
+
+  'experiences.edit.title': 'Edit plan',
+  'experiences.edit.submit': 'Save changes',
+
+  'experiences.detail.transformNotice':
+    'After your plan ends, Kairos will create a memory automatically.',
+  'experiences.detail.endedNotice':
+    'This plan has ended. Your memory is coming in the next update.',
+  'experiences.detail.edit': 'Edit plan',
+  'experiences.detail.cancelPlan': 'Cancel plan',
+  'experiences.detail.remove': 'Remove plan',
+
+  'experiences.cancelConfirm.title': 'Cancel this plan?',
+  'experiences.cancelConfirm.message':
+    'This plan is no longer happening. It will stay visible until shortly after the scheduled end.',
+  'experiences.cancelConfirm.confirm': 'Cancel plan',
+  'experiences.cancelConfirm.keep': 'Keep plan',
+
+  'experiences.removeConfirm.title': 'Remove this plan?',
+  'experiences.removeConfirm.message':
+    'This removes the plan from your Kairos. You will not see it in your plans anymore.',
+  'experiences.removeConfirm.confirm': 'Remove plan',
+  'experiences.removeConfirm.keep': 'Keep plan',
+
+  'experiences.error.create': 'Could not create your plan. Please try again.',
+  'experiences.error.update': 'Could not update your plan. Please try again.',
+  'experiences.error.load': 'Could not load this plan. Please try again.',
+  'experiences.error.cancel': 'Could not cancel this plan. Please try again.',
+  'experiences.error.remove': 'Could not remove this plan. Please try again.',
+  'experiences.error.invalidDates': 'End must be after start.',
+  'experiences.error.titleRequired': 'Please enter a title.',
+  'experiences.error.notUpcoming': 'This plan can no longer be edited.',
 
   // Rules describe the field constraints — shared between onboarding and edit profile.
   'profile.username.rules.length': '· 3–30 characters',
