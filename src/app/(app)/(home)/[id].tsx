@@ -26,6 +26,7 @@ export default function ExperienceDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const localeTag = locale === 'es' ? 'es-ES' : 'en-US';
 
@@ -89,18 +90,26 @@ export default function ExperienceDetailScreen() {
   async function runCancel() {
     if (!experience) return;
     setActionLoading(true);
+    setActionError(null);
     const result = await cancelExperience(experience.id);
     setActionLoading(false);
-    if (result.error) return;
+    if (result.error) {
+      setActionError(t('experiences.error.cancel'));
+      return;
+    }
     await loadExperience();
   }
 
   async function runRemove() {
     if (!experience) return;
     setActionLoading(true);
+    setActionError(null);
     const result = await deleteExperience(experience.id);
     setActionLoading(false);
-    if (result.error) return;
+    if (result.error) {
+      setActionError(t('experiences.error.remove'));
+      return;
+    }
     router.replace('/(app)/(home)');
   }
 
@@ -161,6 +170,12 @@ export default function ExperienceDetailScreen() {
           {ended && !cancelled ? (
             <Text variant="caption" style={styles.notice}>
               {t('experiences.detail.endedNotice')}
+            </Text>
+          ) : null}
+
+          {actionError ? (
+            <Text variant="error" style={styles.actionError}>
+              {actionError}
             </Text>
           ) : null}
 
@@ -245,6 +260,9 @@ const styles = StyleSheet.create({
   notice: {
     marginTop: Spacing.md,
     marginBottom: Spacing.lg,
+  },
+  actionError: {
+    marginBottom: Spacing.sm,
   },
   actions: {
     gap: Spacing.sm,

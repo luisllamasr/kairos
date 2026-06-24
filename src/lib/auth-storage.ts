@@ -101,10 +101,6 @@ async function migrateLegacySession(authStorageKey: string, vault: AuthVault): P
   return vault;
 }
 
-export async function listAccountSnapshots(): Promise<AccountSnapshot[]> {
-  const vault = await readVault();
-  return Object.values(vault.snapshots).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
-}
 
 /** All remembered accounts with local session status (for switcher and sign-in). */
 export async function listRememberedAccounts(): Promise<RememberedAccount[]> {

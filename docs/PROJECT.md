@@ -32,26 +32,13 @@ The app should always prioritize real-world experiences over digital interaction
 
 ---
 
-## 2. Adventures
+## 2. Inspiration and discovery (future)
 
-Users can create adventures based on:
+Kairos will help people answer “What should we do?” through **Opportunities** (M18) — a curated catalog of things worth doing in a city or area — and future **Ideas** (undated wishes that become experiences once scheduled).
 
-- city
-- location
-- participants
-- budget
-- duration
-- mood
-- preferences
-- interests
+This is not the same as user-created **Experiences** (dated plans you intend to live). Opportunities inspire; experiences are real plans on your calendar.
 
-Kairos helps users discover or generate personalized experiences.
-
-The objective is to reduce the question:
-
-"What should we do today?"
-
----
+Do not build AI adventure generators, recommendation feeds, or discovery UIs before the core **Create → Live → Remember** chain is solid.
 
 ## 3. Memories
 
@@ -88,22 +75,13 @@ Kairos does not try to replace Instagram or traditional social networks.
 
 ---
 
-## 5. User-created experiences
+## 5. Public content vs user plans
 
-Users can propose new experiences.
+**User-created experiences** (M12+) are dated plans with `starts_at` and `ends_at`. They are private by default; public discoverability comes later (M16).
 
-A proposed experience should contain:
+**Opportunities** (M18) are Kairos-suggested or catalog content — separate from user plans. A user may create an experience *inspired by* an opportunity (`inspired_by_opportunity_id`), but opportunities are not experiences.
 
-- title
-- description
-- location
-- category
-- estimated cost
-- recommended duration
-
-Before appearing publicly, experiences should be validated.
-
-Quality is more important than quantity.
+There is no separate “propose and validate before public” pipeline for user plans in the current roadmap. Quality over quantity applies to the Opportunities catalog, not to blocking every user plan.
 
 ---
 
@@ -171,7 +149,7 @@ Do not add dependencies without a clear reason.
 # Current status
 
 Phase:
-Foundation complete.
+Identity and social foundation complete. Core domain in progress — **M12 Experiences complete**, preparing for **M13 Memories**.
 
 Created by:
 Luis Llamas Ramón
@@ -189,6 +167,7 @@ Completed milestones:
 9. Incomplete signup cleanup (3-day rule, scheduled Edge Function). ✓
 10. Social user discovery (Search tab, global user search, public profiles, RLS/RPC). ✓
 11. Friend relationships (mutual friendships, requests, Profile friends list). ✓
+12. Experience plans (dated private plans, cancel/remove, Home UI, structured location). ✓
 
 ---
 
@@ -208,7 +187,6 @@ Minimal graph-building before shared experiences. Purpose: **search → view pro
 |-----------|--------|-----|-----|
 | **10. Social user discovery** ✓ | Search tab, global `@username` search, public profile screen, RLS/RPC foundation | Prefix search, public profile (avatar, display name, username), incomplete profiles hidden from discovery | Feed, recommendations, suggested users, Discover content, participant picker, bio/stats, DMs |
 | **11. Friend relationships** ✓ | Mutual friendships on public profile; friends list; incoming requests | Friend request / accept / decline / cancel; remove friend with confirm; 60-day pending expiry; simultaneous auto-accept | Asymmetric follows, home feed, follower counts, mutual-friends ranking, DMs |
-| **12. Experiences** *(implemented — validate)* | Dated private plans; auto `transform_at`; cancel/remove | Cancel vs remove semantics; `purge_at = ends_at + 24h`; structured location | Manual complete, memories UI, participants |
 
 **Navigation (milestone 10):** Third tab **Search** — global people discovery. Not buried in Profile (Profile = identity, friends, and account).
 
@@ -230,13 +208,13 @@ Minimal graph-building before shared experiences. Purpose: **search → view pro
 
 When milestones 10 and 11 are done, **stop expanding the social layer** unless a core-domain feature requires it.
 
-## Phase C — Core domain (next)
+## Phase C — Core domain (in progress)
 
 Build **Create → Live → Remember** in order. Full milestone breakdown and product rules live in **Create → Live → Remember** below.
 
 | Milestone | Scope |
 |-----------|--------|
-| **12. Experiences** | Dated private plans; auto `transform_at`; cancel/remove; Home = planned + cancelled-until-purge |
+| **12. Experiences** ✓ | Dated private plans; auto `transform_at`; cancel/remove; Home = planned + cancelled-until-purge |
 | **13. Memories** | Shared memory core + personal layer; automatic transform; timeline |
 | **14. Shared experiences** | Friend invites; `organizer_id` transfer; group transform |
 | **15. Experience chat** | Purpose-bound coordination; not DMs |
@@ -250,7 +228,7 @@ Build **Create → Live → Remember** in order. Full milestone breakdown and pr
 Public discovery at scale, validated catalog content, optional inspiration feeds. Friendships and visibility enums plug in here — not before core domain exists.
 
 ```text
-Identity ✓ → Friends ✓ → Experiences → Memories → Participants → Chat → Public → Opportunities
+Identity ✓ → Friends ✓ → Experiences ✓ → Memories → Shared experiences → Chat → Public → Opportunities
 ```
 
 ---
@@ -506,45 +484,62 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Milestone 12 — Experiences** (dated private plans; Home = upcoming planned + cancelled-until-purge). Apply migration `20260624100000_experiences_foundation.sql`, then validate below. Product rules: **Create → Live → Remember** section above.
+**Milestone 13 — Memories** (automatic transform, shared memory core, timeline). Complete **M12.5 cleanup** first, then M13.
 
 ---
 
-# Milestone 12 — manual validation checklist
+## Experiences schema notes (M12 audit)
 
-Run after applying migration `20260624100000_experiences_foundation.sql` to linked Supabase.
+Stored columns and why they exist — do not remove without updating this section:
+
+| Column | Recommendation | Rationale |
+|--------|----------------|-----------|
+| `transform_at` | **Keep stored** | Recomputed on edit when `ends_at` changes; indexed for cron (`transform_at <= now()`). Storing avoids repeating `ends_at + interval` in every query and preserves the value if grace-period rules change later. |
+| `purge_at` | **Keep stored** | Set at cancel time from `ends_at + 24h`; indexed for purge cron. Cancel can happen long before `ends_at`; a computed rule would need `cancelled_at` + logic anyway. |
+| `cancelled_at` | **Keep** | Audit and future UX (“cancelled on …”); required by `experiences_cancelled_consistent` CHECK. |
+| `created_by` | **Keep** | Immutable audit of who created the row; distinct from `organizer_id` when leadership transfers (M14). Never shown in UI. |
+| `organizer_id` | **Keep** | Current permission anchor; M14 adds participants but organizer remains the operational role. |
+| `location_name` / lat / lng | **Keep** | M12 uses name only; lat/lng ready for maps and public-by-area without a breaking migration. |
+| `inspired_by_opportunity_id` | **Keep nullable** | Links user plans to Opportunities catalog (M18); no FK until opportunities table exists. |
+| `visibility` | **Keep** | `private` \| `public` from day one; M12 RPCs enforce private only until M16. |
+
+---
+
+# Milestone 12 — validation checklist (complete)
+
+Applied migrations: `20260624100000_experiences_foundation.sql`, `20260624110000_experience_m12_adjustments.sql`.
 
 **Create & list**
 
-- [ ] Home shows empty state with **New plan** CTA
-- [ ] Create plan with title, dates (date/time picker), optional location/description → lands on detail
-- [ ] Plan appears on Home with formatted date range
+- [x] Home shows empty state with **New experience** CTA
+- [x] Create plan with title, dates (date/time picker), optional location/description → lands on detail
+- [x] Plan appears on Home with formatted date range
 
 **Edit**
 
-- [ ] Edit upcoming plan → changes persist on detail and Home
-- [ ] End time must be after start time (validation message if not)
+- [x] Edit upcoming plan → changes persist on detail and Home
+- [x] End time must be after start time (validation message if not)
 
 **Cancel (purge_at = ends_at + 24h)**
 
-- [ ] Cancel upcoming plan → status **Cancelled** on detail; still on Home
-- [ ] Cancel a plan scheduled far in the future → remains visible until **ends_at + 24 hours**, not “24h after cancel tap”
-- [ ] After purge window passes (or simulate via DB) → plan disappears from Home
+- [x] Cancel upcoming plan → status **Cancelled** on detail; still on Home
+- [x] Cancel a plan scheduled far in the future → remains visible until **ends_at + 24 hours**, not “24h after cancel tap”
+- [x] After purge window passes (or simulate via DB) → plan disappears from Home
 
-**Delete**
+**Remove**
 
-- [ ] Remove upcoming plan → confirm copy says it leaves your Kairos (not “created by mistake”)
-- [ ] Remove cancelled plan → disappears immediately from Home and detail
-- [ ] Cancelled plan cannot be edited; remove is still available before purge
+- [x] Remove upcoming plan → confirm copy says it leaves your Kairos (not “created by mistake”)
+- [x] Remove cancelled plan → disappears immediately from Home and detail
+- [x] Cancelled plan cannot be edited; remove is still available before purge
 
 **Transform boundary (no M13 yet)**
 
-- [ ] Plan past `transform_at` drops off Home; detail shows ended notice
-- [ ] No manual **Complete** button anywhere
+- [x] Plan past `transform_at` drops off Home; detail shows ended notice
+- [x] No manual **Complete** button anywhere
 
 **Regression**
 
-- [ ] Search, Profile, friends, switch account, sign out unchanged
+- [x] Search, Profile, friends, switch account, sign out unchanged
 
 ---
 
@@ -585,6 +580,22 @@ Run after applying migration `20260623100000_friend_relationships.sql` to linked
 
 ---
 
+# Supabase security architecture
+
+Kairos prefers **controlled RPCs** with business rules in SQL over broad table write grants. Supabase Security Advisor warnings should be triaged as follows:
+
+| Advisor item | Verdict | Notes |
+|--------------|---------|-------|
+| **SECURITY DEFINER** friendship RPCs | Expected — keep | `send_friend_request`, `accept_friend_request`, etc. enforce canonical pair ordering, expiry, and simultaneous-accept rules. All use `SET search_path = public`. Reads use INVOKER RPCs + RLS SELECT. |
+| **SECURITY DEFINER** experience RPCs | Expected — keep | `create_experience`, `update_experience`, `cancel_experience`, `delete_experience` enforce dates, visibility, and solo-organizer rules. Table writes are not granted to `authenticated`. |
+| **SECURITY DEFINER** triggers / cron | Expected — keep | `handle_new_user`, storage cleanup, purge/transform jobs. Revoke EXECUTE from PUBLIC where applicable (see `20260618010000_security_hardening.sql`). |
+| **`rls_auto_enable()`** | Supabase-internal noise | Not owned by this project; documented in `20260618010000_security_hardening.sql`. No action. |
+| **Leaked password protection** | Not applicable | Kairos uses **Email OTP only** — no password auth. Enable in Supabase dashboard if passwords are added later. |
+
+Do not weaken RLS or remove DEFINER RPCs just to silence the linter.
+
+---
+
 # Important notes for AI assistants
 
 When helping with Kairos:
@@ -593,7 +604,9 @@ When helping with Kairos:
 - Read **Create → Live → Remember** for core domain rules (experiences, memories, transform, deletion).
 - Follow the **Roadmap** section — social foundation is complete; core domain is experiences and memories.
 - Do not build feeds, recommendations, suggested users, or Discover content during early core milestones.
+- Friendships are **mutual** (Discord-style), not follows — no follower counts or asymmetric graph.
 - Do not conflate global user search (Search tab) with the experience participant picker (friends only, later).
+- **Remove** (not “delete as mistake”) removes a plan from the user’s Kairos; shared participant rules arrive in M14.
 - Experiences require **starts_at and ends_at**; undated items are future Ideas, not experiences.
 - Experiences transform to memories **automatically** at `transform_at` — no task-manager “complete” UX.
 - Do not blindly generate files.
