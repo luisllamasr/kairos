@@ -6,15 +6,23 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
+import { TEXT_LIMITS, isWithinTextLimit } from '@/constants/text-limits';
 import { useI18n } from '@/i18n';
-import { datesAreValid, suggestEndDate, toIsoString } from '@/lib/experience-dates';
+import {
+  datesAreValid,
+  experienceStartIsValid,
+  minimumExperienceStartDate,
+  suggestEndDate,
+  toIsoString,
+} from '@/lib/experience-dates';
 import { CreateExperienceInput } from '@/lib/experiences';
 
 function defaultStartDate(): Date {
-  const date = new Date();
-  date.setMinutes(0, 0, 0);
-  date.setHours(date.getHours() + 1);
-  return date;
+  const minStart = minimumExperienceStartDate();
+  const nextHour = new Date();
+  nextHour.setMinutes(0, 0, 0);
+  nextHour.setHours(nextHour.getHours() + 1);
+  return nextHour.getTime() >= minStart.getTime() ? nextHour : minStart;
 }
 
 export type ExperienceFormValues = CreateExperienceInput;
@@ -69,6 +77,24 @@ export function ExperienceForm({
       setError(t('experiences.error.titleRequired'));
       return;
     }
+    if (trimmedTitle.length > TEXT_LIMITS.title) {
+      setError(t('experiences.error.titleTooLong'));
+      return;
+    }
+    const trimmedDescription = description.trim();
+    const trimmedLocation = location.trim();
+    if (!isWithinTextLimit(trimmedDescription, TEXT_LIMITS.description)) {
+      setError(t('experiences.error.descriptionTooLong'));
+      return;
+    }
+    if (!isWithinTextLimit(trimmedLocation, TEXT_LIMITS.locationName)) {
+      setError(t('experiences.error.locationTooLong'));
+      return;
+    }
+    if (!experienceStartIsValid(startsAt)) {
+      setError(t('experiences.error.startsInPast'));
+      return;
+    }
     if (!datesAreValid(startsAt, endsAt)) {
       setError(t('experiences.error.invalidDates'));
       return;
@@ -77,8 +103,8 @@ export function ExperienceForm({
     setError(null);
     await onSubmit({
       title: trimmedTitle,
-      description: description.trim() || null,
-      locationName: location.trim() || null,
+      description: trimmedDescription || null,
+      locationName: trimmedLocation || null,
       startsAt: toIsoString(startsAt),
       endsAt: toIsoString(endsAt),
     });
@@ -93,7 +119,7 @@ export function ExperienceForm({
           setError(null);
         }}
         placeholder={t('experiences.title.placeholder')}
-        maxLength={120}
+        maxLength={TEXT_LIMITS.title}
       />
 
       <Input
@@ -101,6 +127,7 @@ export function ExperienceForm({
         onChangeText={setDescription}
         placeholder={t('experiences.description.placeholder')}
         multiline
+        maxLength={TEXT_LIMITS.description}
         style={styles.multiline}
       />
 
@@ -108,7 +135,7 @@ export function ExperienceForm({
         value={location}
         onChangeText={setLocation}
         placeholder={t('experiences.location.placeholder')}
-        maxLength={200}
+        maxLength={TEXT_LIMITS.locationName}
       />
 
       <ExperienceDateTimeField
@@ -116,6 +143,7 @@ export function ExperienceForm({
         value={startsAt}
         onChange={handleStartChange}
         locale={localeTag}
+        minimumDate={minimumExperienceStartDate()}
         doneLabel={t('experiences.dateTime.done')}
         cancelLabel={t('experiences.dateTime.cancel')}
       />

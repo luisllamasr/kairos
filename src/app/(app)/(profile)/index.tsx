@@ -1,100 +1,213 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
+import { MemoryListRow } from '@/components/MemoryListRow';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
-import { listIncomingFriendRequests } from '@/lib/friendships';
+import { countMyFriends, listIncomingFriendRequests } from '@/lib/friendships';
+import { listMyMemories, transformMyDueExperiences } from '@/lib/memories';
 import { getAvatarPublicUrl } from '@/lib/profile';
+import { MemoryListItem } from '@/types/memory';
 
 export default function ProfileScreen() {
-  const { profile, signOutAccount } = useAuth();
-  const { t } = useI18n();
+  const { profile } = useAuth();
+  const { t, locale } = useI18n();
+  const colors = useTheme();
+
   const [incomingRequestCount, setIncomingRequestCount] = useState(0);
+  const [friendCount, setFriendCount] = useState(0);
+  const [memories, setMemories] = useState<MemoryListItem[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(true);
+  const [memoriesError, setMemoriesError] = useState(false);
 
   const avatarUri = getAvatarPublicUrl(profile?.avatar_url ?? null);
 
-  const loadIncomingRequestCount = useCallback(async () => {
-    const { data, error } = await listIncomingFriendRequests();
-    if (error) return;
-    setIncomingRequestCount(data.length);
+  const loadProfile = useCallback(async () => {
+    setMemoriesLoading(true);
+    setMemoriesError(false);
+
+    const [requestsResult, friendsResult] = await Promise.all([
+      listIncomingFriendRequests(),
+      countMyFriends(),
+    ]);
+
+    await transformMyDueExperiences();
+    const memoriesResult = await listMyMemories();
+
+    if (!requestsResult.error) {
+      setIncomingRequestCount(requestsResult.data.length);
+    }
+    if (!friendsResult.error) {
+      setFriendCount(friendsResult.count);
+    }
+
+    if (memoriesResult.error) {
+      setMemories([]);
+      setMemoriesError(true);
+    } else {
+      setMemories(memoriesResult.data);
+      setMemoriesError(false);
+    }
+
+    setMemoriesLoading(false);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void loadIncomingRequestCount();
-    }, [loadIncomingRequestCount]),
+      void loadProfile();
+    }, [loadProfile]),
   );
 
-  async function handleSignOut() {
-    await signOutAccount();
-  }
-
-  const friendRequestsLabel =
-    incomingRequestCount > 0
-      ? t('profile.friendRequestsWithCount', { count: String(incomingRequestCount) })
-      : t('profile.friendRequests');
-
   return (
-    <Screen centered edges={['top', 'left', 'right']}>
-      <Avatar
-        uri={avatarUri}
-        displayName={profile?.display_name}
-        size={88}
-        style={styles.avatar}
-      />
-      <Text variant="hero" style={styles.name}>
-        {profile?.display_name}
-      </Text>
-      <Text variant="subtitle" style={styles.username}>
-        @{profile?.username}
-      </Text>
-      <Button
-        label={t('profile.editProfile')}
-        onPress={() => router.push('/(app)/(profile)/edit-profile')}
-        style={styles.socialButton}
-      />
-      <Button
-        label={t('profile.friends')}
-        variant="secondary"
-        onPress={() => router.push('/(app)/(profile)/friends')}
-        style={styles.socialButton}
-      />
-      <Button
-        label={friendRequestsLabel}
-        variant="secondary"
-        onPress={() => router.push('/(app)/(profile)/friend-requests')}
-        style={styles.socialButton}
-      />
-      <Button
-        label={t('profile.switchAccount')}
-        variant="secondary"
-        onPress={() => router.push('/(app)/(profile)/switch-account')}
-        style={styles.socialButton}
-      />
-      <Button
-        label={t('profile.signOut')}
-        variant="secondary"
-        onPress={handleSignOut}
-        style={styles.socialButton}
-      />
-      <Button
-        label={t('profile.deleteAccount')}
-        variant="destructive"
-        onPress={() => router.push('/(app)/(profile)/delete-account')}
-      />
+    <Screen edges={['top', 'left', 'right']} style={styles.screen}>
+      <View style={styles.topBar}>
+        <View style={styles.topBarSide} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('settings.open')}
+          onPress={() => router.push('/(app)/(profile)/settings')}
+          style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+
+      <View style={styles.header}>
+        <Avatar
+          uri={avatarUri}
+          displayName={profile?.display_name}
+          size={88}
+          style={styles.avatar}
+        />
+        <Text variant="hero" style={styles.name}>
+          {profile?.display_name}
+        </Text>
+        <Text variant="subtitle" style={styles.username}>
+          @{profile?.username}
+        </Text>
+
+        <View style={styles.statsRow}>
+          <View style={styles.stat}>
+            <Text variant="title">{memories.length}</Text>
+            <Text variant="caption">{t('profile.stats.memories')}</Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/(app)/(profile)/friends')}
+            style={({ pressed }) => [styles.stat, styles.statPressable, pressed && styles.pressed]}
+          >
+            <Text variant="title">{friendCount}</Text>
+            <Text variant="caption">{t('profile.stats.friends')}</Text>
+          </Pressable>
+        </View>
+
+        <Button
+          label={t('profile.editProfile')}
+          onPress={() => router.push('/(app)/(profile)/edit-profile')}
+          style={styles.editButton}
+        />
+
+        {incomingRequestCount > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/(app)/(profile)/friend-requests')}
+            style={({ pressed }) => [styles.requestsLink, pressed && styles.pressed]}
+          >
+            <Text variant="body" style={{ color: colors.brand }}>
+              {t('profile.friendRequestsWithCount', {
+                count: String(incomingRequestCount),
+              })}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={styles.memoriesSection}>
+        <View style={styles.sectionHeader}>
+          <Text variant="title">{t('profile.memoriesSection.title')}</Text>
+          {memories.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(app)/(profile)/memories')}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Text variant="caption" style={{ color: colors.brand }}>
+                {t('profile.memoriesSection.search')}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {memoriesLoading ? (
+          <ActivityIndicator color={colors.brand} style={styles.memoriesLoader} />
+        ) : null}
+
+        {!memoriesLoading && memoriesError ? (
+          <View style={styles.inlineState}>
+            <Text variant="error">{t('memories.loadError')}</Text>
+            <Pressable onPress={loadProfile} style={({ pressed }) => pressed && styles.pressed}>
+              <Text variant="body" style={{ color: colors.brand }}>
+                {t('error.retry')}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {!memoriesLoading && !memoriesError && memories.length === 0 ? (
+          <Text variant="subtitle" style={styles.emptyMemories}>
+            {t('profile.memoriesSection.empty')}
+          </Text>
+        ) : null}
+
+        {!memoriesLoading && !memoriesError
+          ? memories.map((item) => (
+              <MemoryListRow
+                key={item.id}
+                item={item}
+                locale={locale}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/(profile)/memories/[id]',
+                    params: { id: item.id },
+                  })
+                }
+              />
+            ))
+          : null}
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    paddingBottom: Spacing.xl,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: Spacing.sm,
+  },
+  topBarSide: {
+    flex: 1,
+  },
+  settingsButton: {
+    padding: Spacing.xs,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
   avatar: {
-    alignSelf: 'center',
     marginBottom: Spacing.lg,
   },
   name: {
@@ -103,9 +216,54 @@ const styles = StyleSheet.create({
   },
   username: {
     textAlign: 'center',
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.lg,
   },
-  socialButton: {
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xxl,
+    marginBottom: Spacing.lg,
+  },
+  stat: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+    minWidth: 72,
+  },
+  statPressable: {
+    borderRadius: 8,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  editButton: {
+    alignSelf: 'stretch',
     marginBottom: Spacing.sm,
+  },
+  requestsLink: {
+    marginTop: Spacing.xs,
+    paddingVertical: Spacing.xs,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  memoriesSection: {
+    flex: 1,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  memoriesLoader: {
+    marginVertical: Spacing.lg,
+  },
+  inlineState: {
+    gap: Spacing.sm,
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  emptyMemories: {
+    textAlign: 'center',
+    marginTop: Spacing.md,
   },
 });

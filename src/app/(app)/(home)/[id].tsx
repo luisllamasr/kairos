@@ -9,6 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { formatExperienceRange } from '@/lib/experience-dates';
+import { ensureExperienceTransformed } from '@/lib/memories';
 import { cancelExperience, deleteExperience, getExperience } from '@/lib/experiences';
 import {
   canRemoveExperience,
@@ -41,8 +42,35 @@ export default function ExperienceDetailScreen() {
     setError(false);
 
     const { data, error: loadError } = await getExperience(id);
+    if (loadError || !data) {
+      setExperience(null);
+      setError(loadError);
+      setLoading(false);
+      return;
+    }
+
+    const ended = isExperienceEnded(data);
+    const cancelled = data.status === 'cancelled';
+
+    if (ended && !cancelled) {
+      const { data: memoryId, error: transformError } = await ensureExperienceTransformed(id);
+      if (memoryId) {
+        router.replace({
+          pathname: '/(app)/(profile)/memories/[id]',
+          params: { id: memoryId },
+        });
+        return;
+      }
+      if (transformError) {
+        setExperience(data);
+        setError(true);
+        setLoading(false);
+        return;
+      }
+    }
+
     setExperience(data);
-    setError(loadError);
+    setError(false);
     setLoading(false);
   }, [id]);
 

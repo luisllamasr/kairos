@@ -44,6 +44,12 @@ export async function listFriends(): Promise<{ data: PublicProfile[]; error: boo
   return { data: (data ?? []) as PublicProfile[], error: false };
 }
 
+export async function countMyFriends(): Promise<{ count: number; error: boolean }> {
+  const { data, error } = await supabase.rpc('count_my_friends');
+  if (error) return { count: 0, error: true };
+  return { count: (data as number) ?? 0, error: false };
+}
+
 export async function listIncomingFriendRequests(): Promise<{
   data: IncomingFriendRequest[];
   error: boolean;

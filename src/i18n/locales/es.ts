@@ -60,7 +60,7 @@ export const es: Record<TranslationKey, string> = {
   'experiences.detail.transformNotice':
     'Cuando termine tu plan, Kairos creará un recuerdo automáticamente.',
   'experiences.detail.endedNotice':
-    'Este plan ha terminado. Tu recuerdo llegará en la próxima actualización.',
+    'Este plan ha terminado. Abriendo tu recuerdo…',
   'experiences.detail.edit': 'Editar plan',
   'experiences.detail.cancelPlan': 'Cancelar plan',
   'experiences.detail.remove': 'Quitar plan',
@@ -83,7 +83,12 @@ export const es: Record<TranslationKey, string> = {
   'experiences.error.cancel': 'No se pudo cancelar este plan. Por favor, inténtalo de nuevo.',
   'experiences.error.remove': 'No se pudo quitar este plan. Por favor, inténtalo de nuevo.',
   'experiences.error.invalidDates': 'La hora de fin debe ser posterior al inicio.',
+  'experiences.error.startsInPast':
+    'La hora de inicio debe ser al menos 10 minutos desde ahora. Los momentos pasados son Recuerdos.',
   'experiences.error.titleRequired': 'Por favor, introduce un título.',
+  'experiences.error.titleTooLong': 'El título debe tener 120 caracteres o menos.',
+  'experiences.error.descriptionTooLong': 'La descripción debe tener 2.000 caracteres o menos.',
+  'experiences.error.locationTooLong': 'La ubicación debe tener 200 caracteres o menos.',
   'experiences.error.notUpcoming': 'Este plan ya no se puede editar.',
 
   'profile.username.rules.length': '· 3–30 caracteres',
@@ -91,6 +96,14 @@ export const es: Record<TranslationKey, string> = {
   'profile.username.rules.alphanum': '· Al menos una letra o número',
   'profile.displayName.rules.length': '· 1–50 caracteres',
   'profile.editProfile': 'Editar perfil',
+  'profile.memories': 'Recuerdos',
+  'profile.memoriesWithCount': 'Recuerdos ({{count}})',
+  'profile.stats.memories': 'Recuerdos',
+  'profile.stats.friends': 'Amigos',
+  'profile.memoriesSection.title': 'Recuerdos',
+  'profile.memoriesSection.search': 'Buscar',
+  'profile.memoriesSection.empty':
+    'Aún no tienes recuerdos. Tus experiencias aparecerán aquí después de vivirlas.',
   'profile.friends': 'Amigos',
   'profile.friendRequests': 'Solicitudes de amistad',
   'profile.friendRequestsWithCount': 'Solicitudes de amistad ({{count}})',
@@ -193,6 +206,55 @@ export const es: Record<TranslationKey, string> = {
   'friendRequests.back': 'Atrás',
   'friendRequests.accept': 'Aceptar',
   'friendRequests.decline': 'Rechazar',
+
+  'settings.title': 'Ajustes',
+  'settings.subtitle': 'Cuenta y preferencias de la app.',
+  'settings.back': 'Atrás',
+  'settings.open': 'Abrir ajustes',
+
+  'memories.back': 'Atrás',
+  'memories.title': 'Buscar recuerdos',
+  'memories.subtitle': 'Encuentra un recuerdo por título.',
+  'memories.searchPlaceholder': 'Buscar por título',
+  'memories.search': 'Buscar',
+  'memories.empty':
+    'Aún no tienes recuerdos. Cuando termine un plan, Kairos crea un recuerdo para ti.',
+  'memories.loadError': 'No se pudieron cargar tus recuerdos. Por favor, inténtalo de nuevo.',
+
+  'memories.detail.loadError': 'No se pudo cargar este recuerdo. Por favor, inténtalo de nuevo.',
+  'memories.detail.participants': 'Participantes',
+  'memories.detail.leader': 'Líder',
+  'memories.detail.photos': 'Fotos',
+  'memories.detail.noPhotos': 'Aún no hay fotos.',
+  'memories.detail.addPhoto': 'Añadir foto',
+  'memories.detail.personalNote': 'Nota personal',
+  'memories.detail.personalNoteHint': 'Privada — solo tú puedes verla.',
+  'memories.detail.personalNotePlaceholder': 'Tus pensamientos sobre este momento…',
+  'memories.detail.saveNote': 'Guardar nota',
+  'memories.detail.leave': 'Salir del recuerdo',
+
+  'memories.participant.deletedUser': 'Usuario eliminado',
+  'memories.participant.unknown': 'Desconocido',
+
+  'memories.photoViewer.close': 'Cerrar',
+  'memories.photoViewer.openPhoto': 'Ver foto',
+  'memories.photoViewer.index': '{{current}} de {{total}}',
+
+  'memories.leaveConfirm.title': '¿Salir de este recuerdo?',
+  'memories.leaveConfirm.message':
+    'Perderás acceso a este recuerdo. Los demás aún pueden ver el momento compartido.',
+  'memories.leaveConfirm.confirm': 'Salir del recuerdo',
+  'memories.leaveConfirm.cancel': 'Conservar',
+  'memories.leaveConfirm.leaderTitle': 'Elige un nuevo líder',
+  'memories.leaveConfirm.leaderMessage':
+    'Eres el líder. Elige quién debe hacerse cargo antes de salir.',
+
+  'memories.error.saveNote': 'No se pudo guardar tu nota. Por favor, inténtalo de nuevo.',
+  'memories.error.noteTooLong': 'La nota debe tener 1.000 caracteres o menos.',
+  'memories.error.addPhoto': 'No se pudo añadir la foto. Por favor, inténtalo de nuevo.',
+  'memories.error.photoPermission':
+    'Se necesita acceso a la galería para añadir una foto.',
+  'memories.error.leave': 'No se pudo salir de este recuerdo. Por favor, inténtalo de nuevo.',
 
   'error.profileLoad': 'No se pudo cargar tu perfil',
   'error.retry': 'Reintentar',

@@ -1,5 +1,16 @@
 const DEFAULT_END_OFFSET_MS = 3 * 60 * 60 * 1000;
 
+/** Minimum lead time before an experience can start — matches DB `experience_min_starts_at()`. */
+export const EXPERIENCE_MIN_START_BUFFER_MS = 10 * 60 * 1000;
+
+export function minimumExperienceStartDate(): Date {
+  return new Date(Date.now() + EXPERIENCE_MIN_START_BUFFER_MS);
+}
+
+export function experienceStartIsValid(start: Date): boolean {
+  return start.getTime() >= Date.now() + EXPERIENCE_MIN_START_BUFFER_MS;
+}
+
 /** Suggest an end datetime three hours after start (dinner-style default). */
 export function suggestEndDate(start: Date): Date {
   return new Date(start.getTime() + DEFAULT_END_OFFSET_MS);
@@ -40,5 +51,5 @@ export function toIsoString(date: Date): string {
 }
 
 export function datesAreValid(start: Date, end: Date): boolean {
-  return end.getTime() > start.getTime();
+  return experienceStartIsValid(start) && end.getTime() > start.getTime();
 }

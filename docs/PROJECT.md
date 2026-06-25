@@ -285,8 +285,8 @@ Future (M13+): in-window capture (“Save a photo for this memory”) attaches a
 When `transform_at` passes, the experience **transforms** into memory in one transaction:
 
 ```text
-INSERT shared memory (snapshot)
-INSERT memory_participants (personal layer per person)
+INSERT memories (shared core + leader + policies)
+INSERT memory_participants (one row per participant; M13 solo = organizer)
 DELETE experience
 ```
 
@@ -301,10 +301,10 @@ Memory is the **only** long-term source of truth for that moment.
 | Time role | Future / present | Past |
 | User job | Plan, coordinate | Remember, reflect |
 | Lifetime | Ephemeral | Persistent |
-| Home tab | Upcoming + cancelled-until-purge plans | Timeline (M13+) |
-| Content | Title, description, location, schedule | Snapshot + photos + personal notes |
-| Social | Invites, chat (later) | Shared core + personal participation |
-| End state | Transform or purge | User can hide from timeline; shared core may remain for others |
+| Home tab | Upcoming + cancelled-until-purge plans | **Profile** — memories list (M13+) |
+| Content | Title, description, location, schedule | Shared title, description, location, when + photos + **personal notes** |
+| Social | Invites, chat (later) | Shared memory + participation (leave preserves history for others) |
+| End state | Transform or purge | Leave memory; orphan purge when no active participants remain |
 
 ---
 
@@ -400,9 +400,9 @@ Two roles on experiences:
 
 On create (M12): `organizer_id := created_by`.
 
-**Memories:** do not treat `created_by` as displayed ownership. The shared memory represents the group moment. Operational history may snapshot organizer at transform time if needed; personal layers use `memory_participants`.
+**Memories:** do not treat `created_by` or `leader_id` as displayed ownership. The shared memory represents the group moment. **`leader_id`** is operational admin (WhatsApp-style), not owner. Personal data lives only in **`personal_note`** (private) and participation rows.
 
-RLS and RPCs should check **`organizer_id`**, not `created_by`, for management actions.
+RLS and RPCs should check **`organizer_id`** on experiences and **`leader_id` + policies** on memories for management actions — not `created_by`.
 
 ---
 
@@ -417,16 +417,304 @@ RLS and RPCs should check **`organizer_id`**, not `created_by`, for management a
 
 ---
 
-## Shared memory model (M13)
+## Shared memory model (M13 — locked)
 
-One **shared memory core** per transformed experience — not one duplicate memory per participant.
+Memories feel like a **WhatsApp group memory**, not individual duplicated albums.
 
 ```text
-memories              — shared snapshot (title, when, where, …)
-memory_participants   — per-user layer (timeline visibility, personal notes, contributed photos)
+Luis + María + Pedro → ONE memory
+  • Trip to Granada        (shared title — one for everyone)
+  • shared description, location, when
+  • shared photo gallery
+  • participants: Luis, María, Pedro
 ```
 
-A 100-person public event → **one** memory core + 100 participant rows — not 100 copied memories.
+**Avoid:** Luis’s version / María’s version / Pedro’s version of the same moment.
+
+There is **one shared** title, description, location, and date. Everyone remembers the same moment. No personal titles or personal descriptions that fork the shared surface.
+
+**Personal layer (private only):**
+
+- **`personal_note`** on `memory_participants` — “my thoughts about that moment” (e.g. *“Great night, we stayed up until 3 AM”*). Never shown to other participants.
+- No `hidden_from_timeline`, no archive, no invisible copy of the memory.
+
+### Where memories live in the app
+
+| Tab | Role |
+|-----|------|
+| **Home** | What is **going to happen** — upcoming and cancelled-until-purge **experiences** only |
+| **Profile** | Who I am and what I have **lived** — friends, stats, **memories** |
+
+Profile shows memory count (e.g. “7 memories”) and a full **Memories** area: list, search/filter (M13: title search; date filters later), tap through to detail. Memories are core identity — give them real space, not a tiny preview only.
+
+### Data model (conceptual)
+
+```text
+memories
+  — shared core: title, description, location_*, happened_starts_at, happened_ends_at
+  — leader_id (operational admin — not “owner”)
+  — edit_info_policy, add_media_policy
+  — visibility, inspired_by_opportunity_id, transformed_at
+  — created_by, organizer_id_at_transform (audit only, never shown as identity)
+  — updated_at, updated_by (shared edit audit)
+
+memory_participants
+  — memory_id, user_id (nullable after account delete)
+  — role (organizer | participant)
+  — personal_note (private; max 1000 chars)
+  — joined_at, left_at (NULL = active participation)
+  — memory_id → memories(id) ON DELETE CASCADE (leave uses left_at; memory delete removes row)
+
+memory_media
+  — shared gallery; uploaded_by_user_id (nullable → “Deleted user”)
+  — memory_id → memories(id) ON DELETE CASCADE
+```
+
+A 100-person public event → **one** memory row + 100 participant rows — not 100 copied memories.
+
+### Memory leader (admin, not owner)
+
+The leader **manages** the memory (settings, moderation, edit policy) — like a WhatsApp group admin. The memory does **not belong** to them.
+
+```text
+Experience organizer  →  Memory leader (at transform)
+```
+
+**Leader transfer:**
+
+| Case | Rule |
+|------|------|
+| **Voluntary leader leave** | Leader **must choose** the next leader before leaving (human handoff). |
+| **Account deletion / forced removal** | Automatic fallback: **oldest remaining active participant** by `joined_at` (deterministic tie-break if needed). |
+
+`leader_id` must always reference an **active** participant (`left_at IS NULL`). Transfer runs **before** the outgoing leader’s row is marked left or tombstoned.
+
+### Edit permissions (WhatsApp-style)
+
+Policies on each memory (set at transform; leader can change later — UI in M14+):
+
+| Policy | Values |
+|--------|--------|
+| **`edit_info_policy`** | `all_participants` \| `leader_only` |
+| **`add_media_policy`** | `all_participants` \| `leader_only` |
+
+Examples:
+
+- Romantic dinner (2 people): defaults often `all_participants` for both.
+- Public football event (100 people): defaults often `leader_only` for shared info edits; media policy per product default.
+
+**M13:** Store policies + enforce in RPCs. Solo memory defaults to `all_participants`. Settings UI can wait.
+
+**Concurrent edits (shared title/description):**
+
+- **Last-write-wins** at the database — no merge UI.
+- Track **`updated_at`** and **`updated_by`** on `memories` for audit.
+- **Optimistic concurrency (recommended):** `update_memory_info` accepts optional `expected_updated_at`; if stale, return a clear conflict error (*“Someone else updated this memory. Refresh and try again.”*). Simple, not over-engineered — no cooldowns or CRDTs in M13.
+
+Shared fields are **editable** under policy — not frozen at transform.
+
+### Leaving a memory vs deleting an account
+
+These are **different**. Kairos has **no hidden archive**.
+
+**Voluntary leave** — “I don’t want this in my Kairos anymore.”
+
+```text
+SET left_at = now()   -- row stays; user_id stays
+```
+
+- User **loses access** immediately (`list_my_memories` excludes `left_at IS NOT NULL`).
+- User **cannot restore** from a hidden place — leave is intentional.
+- **Others still see** that person was part of the moment (participant history preserved).
+- Luis leaving does **not** make María forget Luis was there.
+
+**Account deletion** — erase personal data, preserve shared moment for others:
+
+```text
+user_id → NULL; clear personal_note; show “Deleted user”
+```
+
+- No name, avatar, username, or PII.
+- Shared photos remain; attribution becomes **“Deleted user”**.
+
+**Active participant** (memory stays alive):
+
+```text
+user_id IS NOT NULL  AND  left_at IS NULL
+```
+
+**Orphan purge:** when **no** active participants remain → `DELETE` memory, media, and storage. Tombstone rows (`user_id NULL`) and `left_at` rows alone do **not** keep a memory alive.
+
+### Personal notes
+
+Included in **M13**. Private thoughts only — never a second version of title/description.
+
+### Media philosophy
+
+- Media belongs to the **shared memory**, attributed to uploader.
+- Uploader can delete **their** uploads; **leader** can remove any media (moderation — full UI M14+).
+- Account deletion: `uploaded_by_user_id → NULL`, photo stays, UI: **“Deleted user”**.
+- Future: reports, leader moderation, purpose-bound DMs — schema must not block these (e.g. future `memory_media_reports`).
+
+### Character limits
+
+Validate in **UI and database** (CHECK + RPC). Align shared fields with experiences where applicable:
+
+| Field | Limit |
+|-------|-------|
+| Title (experience + memory) | **120** characters |
+| Description (experience + memory) | **2000** characters |
+| Location name | **200** characters |
+| Personal note | **1000** characters |
+
+---
+
+## Deletion lifecycle (database rules — locked)
+
+Kairos has two distinct deletion modes. Do not conflate them.
+
+| Mode | Meaning | Example |
+|------|---------|---------|
+| **User leaves** | User opts out; shared entity may survive for others | `leave_memory` → `left_at` |
+| **User account deleted** | Personal identity erased; tombstone where history needs a slot | `auth.admin.deleteUser` |
+| **Parent entity deleted** | Dependent rows removed automatically | `DELETE memories` → CASCADE children |
+| **Orphan purge** | No active participants remain | RPC/cron deletes memory row |
+
+**Active participant** (memories): `user_id IS NOT NULL AND left_at IS NULL`. Tombstones and voluntary leave rows do **not** keep a memory alive.
+
+### Account deletion chain
+
+The **only** supported account deletion entry point is `DELETE auth.users` (via `delete-account` Edge Function). Never `DELETE FROM profiles` directly — that orphans `auth.users`.
+
+```text
+DELETE auth.users
+  → CASCADE DELETE public.profiles
+  → BEFORE DELETE: handle_profile_delete_memories()
+       • transfer leader_id where deleted user was leader
+       • tombstone their memory_participants (user_id → NULL, clear personal_note)
+       • purge memories with no remaining active participants
+  → CASCADE DELETE public.friendships (any row referencing profile)
+  → CASCADE DELETE public.experiences (created_by / organizer_id — M12/M13 solo)
+  → SET NULL on memories audit columns (created_by, leader_id, …)
+  → SET NULL on memory_media.uploaded_by_user_id
+  → AFTER DELETE: pg_net → cleanup-user-storage (avatars)
+```
+
+| Removed on account delete | Preserved for others |
+|---------------------------|----------------------|
+| Profile, username, avatar, auth session | Shared memory when other **active** participants remain |
+| All friendship rows involving user | Shared photos (uploader → “Deleted user”) |
+| User’s upcoming/cancelled experiences (M12 solo) | Other users’ personal notes |
+| Solo memories (no active participants left) | Participant history rows (`left_at`, tombstones) until memory purged |
+
+**Deleted participant display:** UI label **“Deleted user”** — no profile link, username, or avatar. Do not snapshot display names that re-identify the person.
+
+### Foreign key inventory (current schema)
+
+Audit every relationship. **Do not blindly CASCADE profile references on shared entities** — M14 will introduce experience participants.
+
+#### `profiles`
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `profiles.id` | `auth.users(id)` | **CASCADE** | Profile is auth extension; delete together |
+
+#### `friendships`
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `user_low_id` | `profiles(id)` | **CASCADE** | Friendship is personal; gone when either user gone |
+| `user_high_id` | `profiles(id)` | **CASCADE** | Same |
+| `initiated_by` | `profiles(id)` | **CASCADE** | Same |
+
+#### `experiences` (M12/M13 — solo organizer)
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `created_by` | `profiles(id)` | **CASCADE** | ⚠️ **M14 must change to SET NULL** when shared experiences exist |
+| `organizer_id` | `profiles(id)` | **CASCADE** | ⚠️ **M14 must change** — transfer organizer or remove participation, not delete shared plan for everyone |
+
+No child tables yet. `inspired_by_opportunity_id` has no FK (M18). Entity delete = `DELETE experiences` row (transform, purge crons, or user remove RPC).
+
+#### `memories`
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `created_by` | `profiles(id)` | **SET NULL** | Audit only; never shown as identity |
+| `organizer_id_at_transform` | `profiles(id)` | **SET NULL** | Audit only |
+| `leader_id` | `profiles(id)` | **SET NULL** | Transfer via trigger/RPC before leave/delete; SET NULL is fallback |
+| `updated_by` | `profiles(id)` | **SET NULL** | Audit only |
+| `source_experience_id` | *(none)* | — | Intentional: experience row deleted on transform |
+
+#### `memory_participants`
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `memory_id` | `memories(id)` | **CASCADE** | Parent memory deleted → all participant rows gone |
+| `user_id` | `profiles(id)` | **SET NULL** | Account delete → tombstone; leave → `left_at` via RPC, not FK |
+
+#### `memory_media`
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `memory_id` | `memories(id)` | **CASCADE** | Parent memory deleted → metadata rows gone |
+| `uploaded_by_user_id` | `profiles(id)` | **SET NULL** | Account delete → “Deleted user” attribution; photo stays for others |
+
+### Entity deletion (parent row removed)
+
+When a **parent entity** is truly deleted, dependent rows must disappear via CASCADE (not manual cleanup in app code).
+
+| Parent deleted | Auto-removed (CASCADE) | Intentionally kept |
+|----------------|------------------------|--------------------|
+| `memories` | `memory_participants`, `memory_media` (DB) + `memories/{memory_id}/` Storage (pg_net → `cleanup-memory-storage`) | — |
+| `memories` (manual admin delete) | Same — CASCADE + Storage cleanup trigger | — |
+| `experiences` | *(none yet)* | — |
+| `profiles` | `friendships`, `experiences` (M12) | Memory rows (tombstone + purge rules) |
+
+**Leave memory (not delete):** `leave_memory` RPC sets `left_at`; participant row **kept** for shared history. Leader must transfer when required. `purge_memory_if_orphaned` runs when no active participants remain.
+
+**Orphan safety net:** `purge_orphaned_memory_rows()` removes child rows whose `memory_id` was deleted outside CASCADE (manual DB edits only). Runs in **daily maintenance cron** — not in read RPCs. Normal deletes use CASCADE.
+
+**Memory read RPCs:** `list_my_memories`, `count_my_memories`, `get_memory`, `list_memory_participants`, and `list_memory_media` are **LANGUAGE sql, STABLE, SECURITY DEFINER, SELECT only**. No purge, no transform inside reads (Postgres read-only transaction error 25006).
+
+**Memory RLS (SELECT):** Policies on `memories`, `memory_participants`, and `memory_media` must **not** subquery `memory_participants` directly — that causes **42P17 infinite recursion** when INVOKER code reads those tables. Use `is_active_memory_participant(memory_id)` (SECURITY DEFINER helper) in all three SELECT policies.
+
+**Transform before list (client):** Profile and memories search call `transform_my_due_experiences()` as an explicit **write RPC** before listing — not embedded in read RPCs. Also: ended experience detail (`ensure_experience_transformed`), global cron every 15 min.
+
+**RPC implementation note:** Do not use plpgsql `RETURNS TABLE (id, …)` with `RETURN QUERY SELECT m.id, …` — PostgreSQL error **42702**. Use **LANGUAGE sql** (like experiences).
+
+### Storage lifecycle
+
+| Bucket | Path convention | Deleted when |
+|--------|-----------------|--------------|
+| `avatars` | `{user_id}/…` | Account delete → `cleanup-user-storage` Edge Function (pg_net trigger on `profiles` DELETE) |
+| `memories` | `{memory_id}/{media_id}.ext` | Single photo → `delete_memory_photo` RPC + client `storage.remove(path)`; **whole memory** → `DELETE memories` → pg_net → `cleanup-memory-storage` removes `{memory_id}/` folder |
+
+**Memory storage cleanup (M13):** `AFTER DELETE ON memories` queues `cleanup-memory-storage` (same Vault/pg_net pattern as avatars). Runs after the transaction commits — cleanup failure never rolls back memory deletion. Idempotent if folder already empty.
+
+**Shared memories:** Memory row (and Storage folder) are **kept** while any active participant remains. Trigger fires only when the memory **entity** is deleted (last leave, orphan purge, solo account-delete purge, admin delete, cron). M14+ shared leave/delete paths inherit this — no client-side batch cleanup.
+
+**Rule:** Never store `{user_id}/…` paths in `memories` bucket — media belongs to the shared memory, not the uploader folder.
+
+### Cron / RPC purge responsibilities
+
+| Job | Purpose |
+|-----|---------|
+| `purge_stale_experiences()` | Cancelled plans past `purge_at` |
+| `transform_due_experiences()` | Planned → memory at `transform_at` |
+| `purge_orphaned_memories()` | Memories with zero active participants |
+| `purge_orphaned_memory_rows()` | Child rows whose memory row was removed outside CASCADE (cron only) |
+| `maintain_orphaned_memories()` | Daily cron: child-row purge + memory orphan purge |
+| `transform_my_due_experiences()` | Explicit write RPC (Profile/memories screen) + not inside reads |
+| `expire_stale_friend_requests()` | Pending requests > 60 days |
+| `handle_profile_delete_memories()` | Leader transfer + tombstone + **immediate** orphan memory purge (+ Storage cleanup via memory DELETE trigger) |
+
+### M14+ migration requirements (do not ship without)
+
+1. **`experience_participants`** table — leave/tombstone pattern like memories; do not CASCADE-delete shared experiences when one user deletes account.
+2. **`experiences.created_by`** → change to **SET NULL** (audit tombstone).
+3. **`experiences.organizer_id`** → transfer or participation RPC, not CASCADE for shared plans.
+4. ~~**Memory storage cleanup** on `DELETE memories`~~ — **done in M13** (`cleanup-memory-storage` + pg_net trigger). M14 must not reintroduce client-only purge paths.
 
 ---
 
@@ -440,32 +728,28 @@ When a user deletes their Kairos account:
 |---------|-----------|
 | Profile, username, avatar | The shared memory others still share |
 | Auth session, friendships | Other participants’ personal layers |
-| Their upcoming experiences | Memory record of the moment (for others) |
+| Their upcoming experiences (M12 solo) | Memory record of the moment (for others) |
+| Solo memories (no active participants after tombstone) | Shared photos with “Deleted user” attribution |
 
-**Deleted participant display:**
+**Implementation (M13):**
 
-- Not identifiable: no profile link, no username, no avatar.
-- UI label: **“Deleted user”** (or equivalent i18n) — still shows that **someone** was part of the moment.
-- Do **not** retain display-name snapshots that re-identify the person after deletion (GDPR-style erasure for personal data).
+- `memory_participants.user_id` → `ON DELETE SET NULL`; trigger clears `personal_note`.
+- Voluntary leave → `left_at`, row kept.
+- Photos uploaded by deleted user remain; UI: **“Deleted user”**.
+- **`created_by` / `organizer_id_at_transform` / `updated_by`:** SET NULL; never shown as identity.
+- **`leader_id`:** transfer before leader leaves or deletes account; immediate orphan purge when no active participants remain.
 
-**Implementation notes (M13+):**
+**Orphaned memories:** purge when **no active participants**. Tombstones and `left_at` rows alone do not keep a memory alive.
 
-- `memory_participants.user_id` → `ON DELETE SET NULL` (or tombstone id with no PII).
-- Photos uploaded by deleted user: show as from **“Deleted user”**; do not delete others’ memory unless all participants are gone (policy: shared memory persists).
-- **`created_by`** on experience/memory: FK may SET NULL on delete; field is audit-only, never shown as identity.
-- **`organizer_id`:** if organizer deletes account, transfer rules (M14) or co-participant becomes organizer before deletion — edge case for later; solo memory unaffected.
-
-**Orphaned memories (M13):** while some participants remain active, deleted users appear as **“Deleted user.”** When **all** participants have deleted their accounts, the shared memory has no remaining audience — **delete the memory automatically** rather than keeping orphaned data forever.
-
-This matches: *delete my footprint, don’t rewrite our shared past — but don’t keep ghosts nobody can see.*
+This matches: *leave your copy of the past without erasing it for others; delete your account without destroying the shared moment — but don’t keep ghosts nobody active still holds.*
 
 ---
 
-## Experience chat (M15 — architecture only)
+## Experience chat and messaging (future)
 
-- Chat is **scoped to one experience**, participants only — not DMs.
-- Active during live window; frozen then purged with experience.
-- Does not become a general messaging product.
+**Experience chat (M15):** scoped to one experience, participants only — not DMs. Purged with the experience; not copied to memory.
+
+**DMs (later, purpose-bound):** Kairos is not an open inbox. Possible gates: mutual friends, co-participants on a memory or experience, public join context. Not Instagram-style “message anyone.” Architecture should not block this; do not build in M13.
 
 ---
 
@@ -478,13 +762,144 @@ Do **not** add during Experiences/Memories milestones:
 - Undated experiences (use future Ideas)
 - Manual “complete” as primary UX
 - Permanent archive of completed experiences
-- General DM inbox
+- General open DM inbox (purpose-bound messaging may come later)
 
 ---
 
 Current goal:
 
-**Milestone 13 — Memories** (automatic transform, shared memory core, timeline). Complete **M12.5 cleanup** first, then M13.
+**Milestone 13 — Memories** — in progress. Database, transform lifecycle, Profile memories UI, experience ↔ memory text limits aligned.
+
+Applied migrations (when validated): `20260625100000_memories_foundation.sql`, `20260625110000_memories_storage.sql`, `20260625120000_m13_validation_fixes.sql`, `20260625130000_memory_cascade_orphan_cleanup.sql`, `20260625140000_account_delete_memory_purge.sql`, `20260625150000_fix_memory_read_rpc_ambiguity.sql`, `20260625160000_pure_memory_read_rpcs.sql`, `20260625170000_fix_memory_participants_rls_recursion.sql`, `20260625180000_fix_memories_storage_policies.sql`, `20260625190000_memory_storage_cleanup.sql`.
+
+**Planned M13.5 (after M13 validated + committed):** Squash/replace patch-only migrations (e.g. 251500 → superseded by 251600) into a clean linear history for fresh installs. Do not rewrite history on remotes that already applied the chain unless we coordinate a reset; goal is fewer redundant files in repo, not risky force-migration on production.
+
+**Post-M13 follow-up (not blocking commit):** Delete individual photos from memory detail — `delete_memory_photo` RPC + storage remove exist; UI not shipped in M13.
+
+---
+
+# Milestone 13 — validation checklist
+
+Run after `npx supabase db push` on linked Supabase.
+
+**Text limits (Experiences ↔ Memories aligned)**
+
+- [ ] Experience form blocks title > 120, description > 2000, location > 200 (UI + error messages)
+- [ ] DB rejects over-limit experience writes (RPC / CHECK)
+- [ ] Memory personal note blocked at 1000 chars (UI + RPC)
+- [ ] Transformed memory inherits experience title/description/location without truncation errors
+
+**Transform lifecycle**
+
+- [ ] Plan past `transform_at` drops off Home
+- [ ] Profile/memories screen calls `transform_my_due_experiences` then lists (read RPC stays pure)
+- [ ] Opening ended plan detail lazy-transforms and redirects to memory detail
+- [ ] Cron `transform_due_experiences` creates memories for due plans (optional: simulate via SQL)
+- [ ] Cancelled plans never become memories
+
+**Manual transform test (SQL)**
+
+- [ ] `experiences_transform_after_end` blocks `transform_at < ends_at` — correct
+- [ ] To force transform: set `ends_at` in the past, then `transform_at = ends_at + interval '3 hours'` (or any value ≥ `ends_at` and ≤ `now()`), then call `transform_my_due_experiences()` or open Profile
+
+**Experience dates**
+
+- [ ] Cannot create or edit a plan with `starts_at` in the past (10-minute buffer)
+- [ ] UI date picker enforces minimum start time
+
+**Profile memories**
+
+- [ ] Profile shows memory + friend stats; friends stat opens friends list
+- [ ] Edit profile button on Profile (not buried in settings)
+- [ ] Memories appear inline on Profile (feed), not only behind a button
+- [ ] Zero memories → empty state (not load error)
+- [ ] RPC failure → error state with retry
+- [ ] Search link opens title search screen when memories exist
+- [ ] Settings (gear) opens account actions — switch account, sign out, delete account
+
+**Memory data integrity**
+
+- [ ] Deleting a `memories` row cascades to `memory_participants` and `memory_media`
+- [ ] Orphan child rows from manual DB delete are cleaned by daily maintenance cron (not read RPCs)
+- [ ] Account delete on solo memory purges memory immediately (not only daily cron)
+- [ ] Account delete on shared memory tombstones user; memory preserved for active participants
+
+**Memory detail**
+
+- [ ] Shared title, dates, location, description display
+- [ ] Participants list with leader label
+- [ ] Add photo from library → appears in gallery (signed URL)
+- [ ] Tap photo thumbnail → full-size viewer; swipe between photos; close returns to detail
+- [ ] Viewer shows uploader name (or Deleted user) and upload date
+- [ ] Personal note saves and reloads (private)
+- [ ] Leave memory → removed from list; solo memory purges entirely
+- [ ] Solo memory purge → `memories/{memory_id}/` folder removed from Storage (pg_net → `cleanup-memory-storage` logs)
+- [ ] Shared memory leave (when others remain) → memory row + Storage files preserved
+
+**Regression**
+
+- [ ] Create/edit/cancel/remove upcoming experiences unchanged
+- [ ] Search, friends, switch account, sign out unchanged
+
+**Explicitly not in M13 (confirm absent)**
+
+- [ ] No permission settings UI
+- [ ] No moderation / reporting / DMs
+- [ ] No date filter on memories list
+- [ ] No memories on Home tab
+
+---
+
+## M13 implementation plan (locked architecture — approved)
+
+Build in order; validate manually before commit (same rhythm as M12).
+
+### Phase 1 — Database
+
+1. Enums: `memory_participant_role`, `memory_edit_policy`, `memory_media_policy`
+2. Tables: `memories`, `memory_participants`, `memory_media`
+3. CHECK constraints for character limits (title 120, description 2000, location 200, personal_note 1000)
+4. RLS: SELECT for active participants; writes via SECURITY DEFINER RPCs only
+5. RPCs:
+   - `transform_experience_to_memory(p_experience_id)` — internal
+   - `transform_due_experiences()` — cron batch
+   - `ensure_experience_transformed(p_experience_id)` — lazy on read
+   - `list_my_memories(p_search optional)` — Profile list (`left_at IS NULL`)
+   - `get_memory(p_id)` — shared core + participants (others’ notes excluded) + media
+   - `update_memory_info(..., expected_updated_at optional)` — policy + optimistic lock
+   - `update_my_memory_note(p_id, note)`
+   - `leave_memory(p_id, new_leader_id optional)` — leader must pass successor when required
+   - `transfer_memory_leadership(p_id, new_leader_id)` — leader handoff
+   - `add_memory_photo` / `delete_memory_photo` — policy checks
+   - `purge_orphaned_memories()` — cron
+6. Cron: transform due experiences (~15 min); purge orphans (daily)
+7. Leader transfer on profile delete: trigger or extend delete-account flow (oldest active by `joined_at`)
+
+### Phase 2 — Storage
+
+1. Private `memories` bucket — path `memories/{memory_id}/{media_id}.{ext}`
+2. Storage policies: participants only
+3. Cleanup on memory DELETE (Edge Function or pg_net, mirror avatar pattern)
+
+### Phase 3 — Client (minimal functional)
+
+1. Types + `lib/memories.ts`
+2. Profile: memory count stat
+3. `/(profile)/memories` — full list + title search
+4. `/(profile)/memories/[id]` — detail, shared info, gallery, add photo, personal note, leave (with leader picker when needed)
+5. Ended experience detail → lazy transform → redirect to memory
+6. i18n en/es
+7. Manual validation checklist in PROJECT.md
+
+### Explicitly out of M13
+
+- Live-window photo capture during experience
+- Permission settings UI (defaults only)
+- Media reports / leader moderation UI
+- DMs
+- Date filter on memories list
+- Memories on Home tab
+- Rejoin after leave
 
 ---
 
@@ -532,9 +947,9 @@ Applied migrations: `20260624100000_experiences_foundation.sql`, `20260624110000
 - [x] Remove cancelled plan → disappears immediately from Home and detail
 - [x] Cancelled plan cannot be edited; remove is still available before purge
 
-**Transform boundary (no M13 yet)**
+**Transform boundary (M13)**
 
-- [x] Plan past `transform_at` drops off Home; detail shows ended notice
+- [x] Plan past `transform_at` drops off Home; detail lazy-transforms to memory
 - [x] No manual **Complete** button anywhere
 
 **Regression**
@@ -608,6 +1023,10 @@ When helping with Kairos:
 - Do not conflate global user search (Search tab) with the experience participant picker (friends only, later).
 - **Remove** (not “delete as mistake”) removes a plan from the user’s Kairos; shared participant rules arrive in M14.
 - Experiences require **starts_at and ends_at**; undated items are future Ideas, not experiences.
+- Memories live on **Profile**, not Home — Home is future plans only.
+- One **shared** memory per moment — no personal titles; **personal_note** is private only.
+- **Leader** = admin, not owner; voluntary leave requires choosing successor when leader.
+- **Leave** sets `left_at` (preserves history for others); **account delete** tombstones user — no hidden archive.
 - Experiences transform to memories **automatically** at `transform_at` — no task-manager “complete” UX.
 - Do not blindly generate files.
 - Explain architectural decisions.

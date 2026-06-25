@@ -58,7 +58,7 @@ export const en = {
   'experiences.detail.transformNotice':
     'After your plan ends, Kairos will create a memory automatically.',
   'experiences.detail.endedNotice':
-    'This plan has ended. Your memory is coming in the next update.',
+    'This plan has ended. Opening your memory…',
   'experiences.detail.edit': 'Edit plan',
   'experiences.detail.cancelPlan': 'Cancel plan',
   'experiences.detail.remove': 'Remove plan',
@@ -81,7 +81,12 @@ export const en = {
   'experiences.error.cancel': 'Could not cancel this plan. Please try again.',
   'experiences.error.remove': 'Could not remove this plan. Please try again.',
   'experiences.error.invalidDates': 'End must be after start.',
+  'experiences.error.startsInPast':
+    'Start time must be at least 10 minutes from now. Past moments belong in Memories.',
   'experiences.error.titleRequired': 'Please enter a title.',
+  'experiences.error.titleTooLong': 'Title must be 120 characters or fewer.',
+  'experiences.error.descriptionTooLong': 'Description must be 2,000 characters or fewer.',
+  'experiences.error.locationTooLong': 'Location must be 200 characters or fewer.',
   'experiences.error.notUpcoming': 'This plan can no longer be edited.',
 
   // Rules describe the field constraints — shared between onboarding and edit profile.
@@ -90,6 +95,14 @@ export const en = {
   'profile.username.rules.alphanum': '· At least one letter or number',
   'profile.displayName.rules.length': '· 1–50 characters',
   'profile.editProfile': 'Edit profile',
+  'profile.memories': 'Memories',
+  'profile.memoriesWithCount': 'Memories ({{count}})',
+  'profile.stats.memories': 'Memories',
+  'profile.stats.friends': 'Friends',
+  'profile.memoriesSection.title': 'Memories',
+  'profile.memoriesSection.search': 'Search',
+  'profile.memoriesSection.empty':
+    "You don't have memories yet. Experiences will appear here after you live them.",
   'profile.friends': 'Friends',
   'profile.friendRequests': 'Friend requests',
   'profile.friendRequestsWithCount': 'Friend requests ({{count}})',
@@ -189,6 +202,53 @@ export const en = {
   'friendRequests.back': 'Back',
   'friendRequests.accept': 'Accept',
   'friendRequests.decline': 'Decline',
+
+  'settings.title': 'Settings',
+  'settings.subtitle': 'Account and app preferences.',
+  'settings.back': 'Back',
+  'settings.open': 'Open settings',
+
+  'memories.back': 'Back',
+  'memories.title': 'Search memories',
+  'memories.subtitle': 'Find a memory by title.',
+  'memories.searchPlaceholder': 'Search by title',
+  'memories.search': 'Search',
+  'memories.empty': 'No memories yet. When a plan ends, Kairos creates a memory for you.',
+  'memories.loadError': 'Could not load your memories. Please try again.',
+
+  'memories.detail.loadError': 'Could not load this memory. Please try again.',
+  'memories.detail.participants': 'Participants',
+  'memories.detail.leader': 'Leader',
+  'memories.detail.photos': 'Photos',
+  'memories.detail.noPhotos': 'No photos yet.',
+  'memories.detail.addPhoto': 'Add photo',
+  'memories.detail.personalNote': 'Personal note',
+  'memories.detail.personalNoteHint': 'Private — only you can see this.',
+  'memories.detail.personalNotePlaceholder': 'Your thoughts about this moment…',
+  'memories.detail.saveNote': 'Save note',
+  'memories.detail.leave': 'Leave memory',
+
+  'memories.participant.deletedUser': 'Deleted user',
+  'memories.participant.unknown': 'Unknown',
+
+  'memories.photoViewer.close': 'Close',
+  'memories.photoViewer.openPhoto': 'View photo',
+  'memories.photoViewer.index': '{{current}} of {{total}}',
+
+  'memories.leaveConfirm.title': 'Leave this memory?',
+  'memories.leaveConfirm.message':
+    'You will lose access to this memory. Others can still see the shared moment.',
+  'memories.leaveConfirm.confirm': 'Leave memory',
+  'memories.leaveConfirm.cancel': 'Keep',
+  'memories.leaveConfirm.leaderTitle': 'Choose a new leader',
+  'memories.leaveConfirm.leaderMessage':
+    'You are the leader. Pick who should take over before you leave.',
+
+  'memories.error.saveNote': 'Could not save your note. Please try again.',
+  'memories.error.noteTooLong': 'Note must be 1,000 characters or fewer.',
+  'memories.error.addPhoto': 'Could not add photo. Please try again.',
+  'memories.error.photoPermission': 'Photo library access is required to add a photo.',
+  'memories.error.leave': 'Could not leave this memory. Please try again.',
 
   'error.profileLoad': 'Could not load your profile',
   'error.retry': 'Try again',
