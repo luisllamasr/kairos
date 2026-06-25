@@ -70,12 +70,6 @@ export async function transformMyDueExperiences(): Promise<RpcResult> {
   return { ok: true, error: false };
 }
 
-export async function countMyMemories(): Promise<{ count: number; error: boolean }> {
-  const { data, error } = await supabase.rpc('count_my_memories');
-  if (error) return { count: 0, error: true };
-  return { count: (data as number) ?? 0, error: false };
-}
-
 export async function listMyMemories(search?: string): Promise<{
   data: MemoryListItem[];
   error: boolean;
@@ -183,22 +177,9 @@ export async function registerMemoryPhoto(input: {
   return { ok: true, error: false };
 }
 
-export async function deleteMemoryPhoto(mediaId: string): Promise<RpcResult & { path?: string }> {
-  const { data: media, error: loadError } = await supabase
-    .from('memory_media')
-    .select('storage_path')
-    .eq('id', mediaId)
-    .maybeSingle();
-
-  if (loadError) return { ok: false, error: true };
-
+export async function deleteMemoryPhoto(mediaId: string): Promise<RpcResult> {
   const { error } = await supabase.rpc('delete_memory_photo', { p_media_id: mediaId });
   if (error) return { ok: false, error: true };
-
-  if (media?.storage_path) {
-    await supabase.storage.from('memories').remove([media.storage_path]);
-  }
-
   return { ok: true, error: false };
 }
 

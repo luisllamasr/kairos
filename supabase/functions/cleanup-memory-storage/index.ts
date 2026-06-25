@@ -1,29 +1,14 @@
 /**
  * Edge Function: cleanup-memory-storage
  *
- * Called by the pg_net trigger `on_memory_deleted_cleanup_storage` (migration
- * 20260625190000). Removes all files under memories/{memory_id}/ when a memory
- * row is deleted.
+ * Called by pg_net triggers on DELETE:
+ *   • public.memories      → remove every file under memories/{memory_id}/
+ *   • public.memory_media  → remove one file at old.storage_path
  *
- * Runs OUTSIDE the database transaction (pg_net queues HTTP after commit).
- * A cleanup failure never blocks or rolls back memory deletion.
+ * Runs OUTSIDE the database transaction. Cleanup failure never rolls back deletion.
  *
- * ── Trigger flow ─────────────────────────────────────────────────────────────
- *   DELETE public.memories  (leave last participant, orphan purge, admin, …)
- *   → CASCADE deletes memory_participants + memory_media metadata
- *   → AFTER DELETE trigger → net.http_post() (queued, async)
- *   → transaction commits
- *   → pg_net worker POSTs to this function
- *   → Storage API deletes every object under {memory_id}/
- *
- * ── Shared memories (M14+) ─────────────────────────────────────────────────
- *   Memory row is only deleted when no active participants remain. While others
- *   stay, the row (and Storage folder) are kept. Account delete on a shared
- *   memory tombstones the user but preserves the memory for active participants.
- *
- * ── Single photo delete ──────────────────────────────────────────────────────
- *   delete_memory_photo RPC + client remove() handles one file at a time.
- *   This function is for entity deletion only (whole memory folder).
+ * Vault + deploy: same setup as migration 20260619000000 (avatars).
+ *   npx supabase functions deploy cleanup-memory-storage
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -36,6 +21,13 @@ interface WebhookPayload {
   schema: string
   record: Record<string, unknown> | null
   old_record: Record<string, unknown> | null
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 Deno.serve(async (req: Request) => {
@@ -57,15 +49,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (payload.type !== 'DELETE' || !payload.old_record) {
-    return new Response(
-      JSON.stringify({ skipped: true }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const memoryId = payload.old_record.id as string | undefined
-  if (!memoryId) {
-    return new Response('old_record.id missing', { status: 400 })
+    return jsonResponse({ skipped: true })
   }
 
   const supabase = createClient(
@@ -73,59 +57,72 @@ Deno.serve(async (req: Request) => {
     serviceRoleKey,
   )
 
-  const { data: files, error: listError } = await supabase.storage
-    .from(MEMORY_STORAGE_BUCKET)
-    .list(memoryId)
+  if (payload.table === 'memory_media') {
+    const storagePath = payload.old_record.storage_path as string | undefined
+    if (!storagePath) {
+      return new Response('old_record.storage_path missing', { status: 400 })
+    }
 
-  if (listError) {
-    const msg = `list failed: ${listError.message}`
-    console.error(`[cleanup-memory-storage] ${msg} | memory: ${memoryId}`)
-    return new Response(
-      JSON.stringify({ success: false, memoryId, errors: [msg] }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    const { error: removeError } = await supabase.storage
+      .from(MEMORY_STORAGE_BUCKET)
+      .remove([storagePath])
+
+    if (removeError) {
+      const msg = `remove failed: ${removeError.message}`
+      console.error(`[cleanup-memory-storage] ${msg} | path: ${storagePath}`)
+      return jsonResponse({ success: false, storagePath, errors: [msg] }, 500)
+    }
+
+    console.log(`[cleanup-memory-storage] removed media file | path: ${storagePath}`)
+    return jsonResponse({ success: true, storagePath, removed: 1 })
   }
 
-  if (!files || files.length === 0) {
-    console.log(`[cleanup-memory-storage] no files | memory: ${memoryId}`)
-    return new Response(
-      JSON.stringify({ success: true, memoryId, removed: 0 }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
+  if (payload.table === 'memories') {
+    const memoryId = payload.old_record.id as string | undefined
+    if (!memoryId) {
+      return new Response('old_record.id missing', { status: 400 })
+    }
+
+    const { data: files, error: listError } = await supabase.storage
+      .from(MEMORY_STORAGE_BUCKET)
+      .list(memoryId)
+
+    if (listError) {
+      const msg = `list failed: ${listError.message}`
+      console.error(`[cleanup-memory-storage] ${msg} | memory: ${memoryId}`)
+      return jsonResponse({ success: false, memoryId, errors: [msg] }, 500)
+    }
+
+    if (!files || files.length === 0) {
+      console.log(`[cleanup-memory-storage] no files | memory: ${memoryId}`)
+      return jsonResponse({ success: true, memoryId, removed: 0 })
+    }
+
+    const paths = files
+      .filter((f) => f.name && !f.name.endsWith('/'))
+      .map((f) => `${memoryId}/${f.name}`)
+
+    if (paths.length === 0) {
+      return jsonResponse({ success: true, memoryId, removed: 0 })
+    }
+
+    const { error: removeError } = await supabase.storage
+      .from(MEMORY_STORAGE_BUCKET)
+      .remove(paths)
+
+    if (removeError) {
+      const msg = `remove failed: ${removeError.message}`
+      console.error(
+        `[cleanup-memory-storage] ${msg} | memory: ${memoryId} | paths: ${paths.join(', ')}`,
+      )
+      return jsonResponse({ success: false, memoryId, errors: [msg] }, 500)
+    }
+
+    console.log(
+      `[cleanup-memory-storage] removed ${paths.length} file(s) | memory: ${memoryId}`,
     )
+    return jsonResponse({ success: true, memoryId, removed: paths.length })
   }
 
-  const paths = files
-    .filter((f) => f.name && !f.name.endsWith('/'))
-    .map((f) => `${memoryId}/${f.name}`)
-
-  if (paths.length === 0) {
-    return new Response(
-      JSON.stringify({ success: true, memoryId, removed: 0 }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const { error: removeError } = await supabase.storage
-    .from(MEMORY_STORAGE_BUCKET)
-    .remove(paths)
-
-  if (removeError) {
-    const msg = `remove failed: ${removeError.message}`
-    console.error(
-      `[cleanup-memory-storage] ${msg} | memory: ${memoryId} | paths: ${paths.join(', ')}`,
-    )
-    return new Response(
-      JSON.stringify({ success: false, memoryId, errors: [msg] }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  console.log(
-    `[cleanup-memory-storage] removed ${paths.length} file(s) | memory: ${memoryId}`,
-  )
-
-  return new Response(
-    JSON.stringify({ success: true, memoryId, removed: paths.length }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  return jsonResponse({ skipped: true, table: payload.table })
 })

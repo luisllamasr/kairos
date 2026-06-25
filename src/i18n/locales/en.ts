@@ -95,8 +95,6 @@ export const en = {
   'profile.username.rules.alphanum': '· At least one letter or number',
   'profile.displayName.rules.length': '· 1–50 characters',
   'profile.editProfile': 'Edit profile',
-  'profile.memories': 'Memories',
-  'profile.memoriesWithCount': 'Memories ({{count}})',
   'profile.stats.memories': 'Memories',
   'profile.stats.friends': 'Friends',
   'profile.memoriesSection.title': 'Memories',
@@ -233,7 +231,14 @@ export const en = {
 
   'memories.photoViewer.close': 'Close',
   'memories.photoViewer.openPhoto': 'View photo',
+  'memories.photoViewer.delete': 'Delete photo',
   'memories.photoViewer.index': '{{current}} of {{total}}',
+
+  'memories.deleteConfirm.title': 'Delete this photo?',
+  'memories.deleteConfirm.message':
+    'This removes the photo for everyone in this memory. This cannot be undone.',
+  'memories.deleteConfirm.confirm': 'Delete photo',
+  'memories.deleteConfirm.cancel': 'Keep photo',
 
   'memories.leaveConfirm.title': 'Leave this memory?',
   'memories.leaveConfirm.message':
@@ -247,6 +252,7 @@ export const en = {
   'memories.error.saveNote': 'Could not save your note. Please try again.',
   'memories.error.noteTooLong': 'Note must be 1,000 characters or fewer.',
   'memories.error.addPhoto': 'Could not add photo. Please try again.',
+  'memories.error.deletePhoto': 'Could not delete this photo. Please try again.',
   'memories.error.photoPermission': 'Photo library access is required to add a photo.',
   'memories.error.leave': 'Could not leave this memory. Please try again.',
 

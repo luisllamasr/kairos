@@ -54,3 +54,39 @@ export function isMemoryParticipantActive(
 ): boolean {
   return participant.user_id !== null && participant.left_at === null;
 }
+
+/** Uploader or memory leader may delete a photo (matches delete_memory_photo RPC). */
+export function canDeleteMemoryPhoto(
+  media: Pick<MemoryMedia, 'uploaded_by_user_id'>,
+  memory: Pick<Memory, 'am_leader'>,
+  myUserId: string | null,
+): boolean {
+  if (!myUserId) return false;
+  if (media.uploaded_by_user_id === myUserId) return true;
+  return memory.am_leader;
+}
+
+export function memoryParticipantDisplayName(
+  participant: Pick<MemoryParticipant, 'user_id' | 'display_name' | 'username'>,
+  labels: { deletedUser: string; unknown: string },
+): string {
+  if (participant.user_id === null) {
+    return labels.deletedUser;
+  }
+  return participant.display_name ?? participant.username ?? labels.unknown;
+}
+
+export function memoryMediaUploaderDisplayName(
+  media: Pick<MemoryMedia, 'uploaded_by_user_id'>,
+  participants: MemoryParticipant[],
+  labels: { deletedUser: string; unknown: string },
+): string {
+  if (media.uploaded_by_user_id === null) {
+    return labels.deletedUser;
+  }
+  const match = participants.find((p) => p.user_id === media.uploaded_by_user_id);
+  if (!match) {
+    return labels.deletedUser;
+  }
+  return memoryParticipantDisplayName(match, labels);
+}

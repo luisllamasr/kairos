@@ -96,8 +96,6 @@ export const es: Record<TranslationKey, string> = {
   'profile.username.rules.alphanum': '· Al menos una letra o número',
   'profile.displayName.rules.length': '· 1–50 caracteres',
   'profile.editProfile': 'Editar perfil',
-  'profile.memories': 'Recuerdos',
-  'profile.memoriesWithCount': 'Recuerdos ({{count}})',
   'profile.stats.memories': 'Recuerdos',
   'profile.stats.friends': 'Amigos',
   'profile.memoriesSection.title': 'Recuerdos',
@@ -238,7 +236,14 @@ export const es: Record<TranslationKey, string> = {
 
   'memories.photoViewer.close': 'Cerrar',
   'memories.photoViewer.openPhoto': 'Ver foto',
+  'memories.photoViewer.delete': 'Eliminar foto',
   'memories.photoViewer.index': '{{current}} de {{total}}',
+
+  'memories.deleteConfirm.title': '¿Eliminar esta foto?',
+  'memories.deleteConfirm.message':
+    'Se eliminará la foto para todos en este recuerdo. No se puede deshacer.',
+  'memories.deleteConfirm.confirm': 'Eliminar foto',
+  'memories.deleteConfirm.cancel': 'Conservar foto',
 
   'memories.leaveConfirm.title': '¿Salir de este recuerdo?',
   'memories.leaveConfirm.message':
@@ -252,6 +257,7 @@ export const es: Record<TranslationKey, string> = {
   'memories.error.saveNote': 'No se pudo guardar tu nota. Por favor, inténtalo de nuevo.',
   'memories.error.noteTooLong': 'La nota debe tener 1.000 caracteres o menos.',
   'memories.error.addPhoto': 'No se pudo añadir la foto. Por favor, inténtalo de nuevo.',
+  'memories.error.deletePhoto': 'No se pudo eliminar la foto. Por favor, inténtalo de nuevo.',
   'memories.error.photoPermission':
     'Se necesita acceso a la galería para añadir una foto.',
   'memories.error.leave': 'No se pudo salir de este recuerdo. Por favor, inténtalo de nuevo.',

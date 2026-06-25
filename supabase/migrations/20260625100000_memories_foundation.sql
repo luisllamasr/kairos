@@ -1,11 +1,10 @@
--- Migration: memories foundation (milestone 13)
+-- Migration: memories foundation (M13 — squashed)
 --
 -- Product rules: docs/PROJECT.md — Shared memory model (M13 — locked)
---   • One shared memory per transformed experience; DELETE experience after transform.
---   • leader_id = admin (not owner); policies stored with defaults (no settings UI in M13).
---   • Leave → left_at (preserve participant history); account delete → user_id NULL tombstone.
---   • Orphan purge when no active participants (user_id IS NOT NULL AND left_at IS NULL).
---   • Text limits aligned with experiences: title 120, description 2000, location 200, note 1000.
+-- Tables, RLS, helpers, transform, read/write RPCs, experience guards, transform cron.
+-- Lifecycle maintenance (orphan purge, account delete) → 251200_memories_lifecycle.sql
+-- Storage bucket → 251100_memories_storage.sql
+-- Storage cleanup triggers → 251300_memories_storage_cleanup.sql
 
 -- -----------------------------------------------------------------------------
 -- 1. Enums + tables
@@ -110,6 +109,9 @@ CREATE INDEX memory_participants_user_active_idx
 CREATE INDEX memory_participants_memory_idx
   ON public.memory_participants (memory_id);
 
+COMMENT ON CONSTRAINT memory_participants_memory_fkey ON public.memory_participants IS
+  'Deleting a memory removes all participant rows (distinct from leave → left_at).';
+
 CREATE TABLE public.memory_media (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   memory_id           UUID NOT NULL,
@@ -134,6 +136,9 @@ CREATE TABLE public.memory_media (
 
 CREATE INDEX memory_media_memory_idx ON public.memory_media (memory_id, sort_order, created_at);
 
+COMMENT ON CONSTRAINT memory_media_memory_fkey ON public.memory_media IS
+  'Deleting a memory removes all media metadata rows. Storage cleanup is separate.';
+
 CREATE TRIGGER set_memories_updated_at
   BEFORE UPDATE ON public.memories
   FOR EACH ROW
@@ -151,49 +156,7 @@ ALTER TABLE public.memories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.memory_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.memory_media ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "memories_select_active_participant"
-  ON public.memories
-  FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.memory_participants mp
-      WHERE mp.memory_id = memories.id
-        AND mp.user_id = auth.uid()
-        AND mp.left_at IS NULL
-    )
-  );
-
-CREATE POLICY "memory_participants_select_fellow"
-  ON public.memory_participants
-  FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.memory_participants viewer
-      WHERE viewer.memory_id = memory_participants.memory_id
-        AND viewer.user_id = auth.uid()
-        AND viewer.left_at IS NULL
-    )
-  );
-
-CREATE POLICY "memory_media_select_participant"
-  ON public.memory_media
-  FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.memory_participants mp
-      WHERE mp.memory_id = memory_media.memory_id
-        AND mp.user_id = auth.uid()
-        AND mp.left_at IS NULL
-    )
-  );
-
--- Writes via SECURITY DEFINER RPCs only.
+-- Writes via SECURITY DEFINER RPCs only. Policies created after helpers (section 3).
 
 -- -----------------------------------------------------------------------------
 -- 3. Internal helpers
@@ -219,6 +182,7 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.is_active_memory_participant(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_active_memory_participant(uuid, uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.memory_has_active_participants(p_memory_id uuid)
 RETURNS boolean
@@ -305,39 +269,23 @@ $$;
 
 REVOKE ALL ON FUNCTION public.transfer_memory_leadership(uuid, uuid) FROM PUBLIC;
 
-CREATE OR REPLACE FUNCTION public.handle_profile_delete_memories()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_memory_id uuid;
-  v_new_leader uuid;
-BEGIN
-  FOR v_memory_id IN
-    SELECT m.id FROM public.memories m WHERE m.leader_id = OLD.id
-  LOOP
-    v_new_leader := public.elect_memory_leader(v_memory_id, OLD.id);
-    UPDATE public.memories
-    SET leader_id = v_new_leader
-    WHERE id = v_memory_id;
-  END LOOP;
+CREATE POLICY "memories_select_active_participant"
+  ON public.memories
+  FOR SELECT
+  TO authenticated
+  USING (public.is_active_memory_participant(id));
 
-  UPDATE public.memory_participants
-  SET user_id = NULL, personal_note = NULL
-  WHERE user_id = OLD.id;
+CREATE POLICY "memory_participants_select_fellow"
+  ON public.memory_participants
+  FOR SELECT
+  TO authenticated
+  USING (public.is_active_memory_participant(memory_id));
 
-  RETURN OLD;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.handle_profile_delete_memories() FROM PUBLIC;
-
-CREATE TRIGGER on_profile_delete_memories
-  BEFORE DELETE ON public.profiles
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_profile_delete_memories();
+CREATE POLICY "memory_media_select_participant"
+  ON public.memory_media
+  FOR SELECT
+  TO authenticated
+  USING (public.is_active_memory_participant(memory_id));
 
 -- -----------------------------------------------------------------------------
 -- 4. Transform experience → memory
@@ -473,11 +421,227 @@ $$;
 REVOKE ALL ON FUNCTION public.ensure_experience_transformed(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.ensure_experience_transformed(uuid) TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.experience_min_starts_at()
+RETURNS timestamptz
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT NOW() + interval '10 minutes';
+$$;
+
+REVOKE ALL ON FUNCTION public.experience_min_starts_at() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.transform_my_due_experiences()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_me     uuid := auth.uid();
+  v_exp_id uuid;
+BEGIN
+  IF v_me IS NULL THEN
+    RETURN;
+  END IF;
+
+  FOR v_exp_id IN
+    SELECT e.id
+    FROM public.experiences e
+    WHERE e.organizer_id = v_me
+      AND e.status = 'planned'
+      AND e.transform_at <= NOW()
+    FOR UPDATE OF e
+  LOOP
+    PERFORM public.transform_experience_to_memory(v_exp_id);
+  END LOOP;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.transform_my_due_experiences() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.transform_my_due_experiences() TO authenticated;
+
 -- -----------------------------------------------------------------------------
--- 5. Read RPCs
+-- 5. Experience guards (future-start validation)
 -- -----------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION public.count_my_memories()
+CREATE OR REPLACE FUNCTION public.create_experience(
+  p_title                text,
+  p_description          text,
+  p_location_name        text,
+  p_starts_at            timestamptz,
+  p_ends_at              timestamptz,
+  p_location_latitude    double precision DEFAULT NULL,
+  p_location_longitude   double precision DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_me  uuid;
+  v_id  uuid;
+  v_title text;
+BEGIN
+  v_me := auth.uid();
+  IF v_me IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  IF p_starts_at IS NULL OR p_ends_at IS NULL THEN
+    RAISE EXCEPTION 'dates required';
+  END IF;
+
+  IF p_starts_at < public.experience_min_starts_at() THEN
+    RAISE EXCEPTION 'starts in past';
+  END IF;
+
+  IF p_ends_at <= p_starts_at THEN
+    RAISE EXCEPTION 'invalid dates';
+  END IF;
+
+  v_title := trim(p_title);
+  IF char_length(v_title) < 1 OR char_length(v_title) > 120 THEN
+    RAISE EXCEPTION 'invalid title';
+  END IF;
+
+  IF p_description IS NOT NULL AND char_length(p_description) > 2000 THEN
+    RAISE EXCEPTION 'invalid description';
+  END IF;
+
+  IF p_location_name IS NOT NULL AND char_length(trim(p_location_name)) > 200 THEN
+    RAISE EXCEPTION 'invalid location name';
+  END IF;
+
+  IF (p_location_latitude IS NULL) <> (p_location_longitude IS NULL) THEN
+    RAISE EXCEPTION 'invalid location coordinates';
+  END IF;
+
+  IF p_location_latitude IS NOT NULL AND (
+    p_location_latitude < -90 OR p_location_latitude > 90
+    OR p_location_longitude < -180 OR p_location_longitude > 180
+  ) THEN
+    RAISE EXCEPTION 'invalid location coordinates';
+  END IF;
+
+  INSERT INTO public.experiences (
+    created_by,
+    organizer_id,
+    title,
+    description,
+    location_name,
+    location_latitude,
+    location_longitude,
+    starts_at,
+    ends_at,
+    visibility,
+    status,
+    transform_at
+  )
+  VALUES (
+    v_me,
+    v_me,
+    v_title,
+    NULLIF(trim(p_description), ''),
+    NULLIF(trim(p_location_name), ''),
+    p_location_latitude,
+    p_location_longitude,
+    p_starts_at,
+    p_ends_at,
+    'private',
+    'planned',
+    public.compute_experience_transform_at(p_ends_at)
+  )
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_experience(
+  p_id                   uuid,
+  p_title                text,
+  p_description          text,
+  p_location_name        text,
+  p_starts_at            timestamptz,
+  p_ends_at              timestamptz,
+  p_location_latitude    double precision DEFAULT NULL,
+  p_location_longitude   double precision DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_me    uuid;
+  v_title text;
+BEGIN
+  v_me := auth.uid();
+  IF v_me IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  IF p_starts_at IS NULL OR p_ends_at IS NULL THEN
+    RAISE EXCEPTION 'dates required';
+  END IF;
+
+  IF p_starts_at < public.experience_min_starts_at() THEN
+    RAISE EXCEPTION 'starts in past';
+  END IF;
+
+  IF p_ends_at <= p_starts_at THEN
+    RAISE EXCEPTION 'invalid dates';
+  END IF;
+
+  v_title := trim(p_title);
+  IF char_length(v_title) < 1 OR char_length(v_title) > 120 THEN
+    RAISE EXCEPTION 'invalid title';
+  END IF;
+
+  IF p_description IS NOT NULL AND char_length(p_description) > 2000 THEN
+    RAISE EXCEPTION 'invalid description';
+  END IF;
+
+  IF p_location_name IS NOT NULL AND char_length(trim(p_location_name)) > 200 THEN
+    RAISE EXCEPTION 'invalid location name';
+  END IF;
+
+  IF (p_location_latitude IS NULL) <> (p_location_longitude IS NULL) THEN
+    RAISE EXCEPTION 'invalid location coordinates';
+  END IF;
+
+  IF p_location_latitude IS NOT NULL AND (
+    p_location_latitude < -90 OR p_location_latitude > 90
+    OR p_location_longitude < -180 OR p_location_longitude > 180
+  ) THEN
+    RAISE EXCEPTION 'invalid location coordinates';
+  END IF;
+
+  UPDATE public.experiences
+  SET
+    title = v_title,
+    description = NULLIF(trim(p_description), ''),
+    location_name = NULLIF(trim(p_location_name), ''),
+    location_latitude = p_location_latitude,
+    location_longitude = p_location_longitude,
+    starts_at = p_starts_at,
+    ends_at = p_ends_at,
+    transform_at = public.compute_experience_transform_at(p_ends_at)
+  WHERE id = p_id
+    AND organizer_id = v_me
+    AND status = 'planned'
+    AND transform_at > NOW();
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not found';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.count_my_friends()
 RETURNS integer
 LANGUAGE sql
 STABLE
@@ -485,13 +649,17 @@ SECURITY INVOKER
 SET search_path = public
 AS $$
   SELECT COUNT(*)::integer
-  FROM public.memory_participants mp
-  WHERE mp.user_id = auth.uid()
-    AND mp.left_at IS NULL;
+  FROM public.friendships f
+  WHERE f.status = 'accepted'
+    AND (f.user_low_id = auth.uid() OR f.user_high_id = auth.uid());
 $$;
 
-REVOKE ALL ON FUNCTION public.count_my_memories() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.count_my_memories() TO authenticated;
+REVOKE ALL ON FUNCTION public.count_my_friends() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.count_my_friends() TO authenticated;
+
+-- -----------------------------------------------------------------------------
+-- 6. Read RPCs (pure SQL, STABLE, SECURITY DEFINER — no side effects)
+-- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.list_my_memories(p_search text DEFAULT NULL)
 RETURNS TABLE (
@@ -503,7 +671,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
@@ -518,9 +686,9 @@ AS $$
    AND mp.user_id = auth.uid()
    AND mp.left_at IS NULL
   WHERE p_search IS NULL
-     OR trim(p_search) = ''
-     OR m.title ILIKE '%' || trim(p_search) || '%'
-  ORDER BY m.happened_starts_at DESC, m.created_at DESC;
+     OR btrim(p_search) = ''
+     OR m.title ILIKE '%' || btrim(p_search) || '%'
+  ORDER BY m.happened_starts_at DESC, m.transformed_at DESC;
 $$;
 
 REVOKE ALL ON FUNCTION public.list_my_memories(text) FROM PUBLIC;
@@ -546,7 +714,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
@@ -576,6 +744,22 @@ $$;
 REVOKE ALL ON FUNCTION public.get_memory(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_memory(uuid) TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.count_my_memories()
+RETURNS integer
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COUNT(*)::integer
+  FROM public.memory_participants mp
+  JOIN public.memories m ON m.id = mp.memory_id
+  WHERE mp.user_id = auth.uid()
+    AND mp.left_at IS NULL;
+$$;
+
+REVOKE ALL ON FUNCTION public.count_my_memories() FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION public.list_memory_participants(p_memory_id uuid)
 RETURNS TABLE (
   participant_id uuid,
@@ -589,7 +773,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
@@ -623,7 +807,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
@@ -644,7 +828,7 @@ REVOKE ALL ON FUNCTION public.list_memory_media(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.list_memory_media(uuid) TO authenticated;
 
 -- -----------------------------------------------------------------------------
--- 6. Write RPCs
+-- 7. Write RPCs
 -- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.update_memory_info(
@@ -913,10 +1097,6 @@ $$;
 REVOKE ALL ON FUNCTION public.delete_memory_photo(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.delete_memory_photo(uuid) TO authenticated;
 
--- -----------------------------------------------------------------------------
--- 7. Orphan purge cron
--- -----------------------------------------------------------------------------
-
 CREATE OR REPLACE FUNCTION public.purge_orphaned_memories()
 RETURNS integer
 LANGUAGE plpgsql
@@ -942,6 +1122,10 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.purge_orphaned_memories() FROM PUBLIC;
 
+-- -----------------------------------------------------------------------------
+-- 8. Transform cron
+-- -----------------------------------------------------------------------------
+
 DO $$
 DECLARE
   _job_id bigint;
@@ -955,19 +1139,4 @@ SELECT cron.schedule(
   'transform-due-experiences',
   '*/15 * * * *',
   $$SELECT public.transform_due_experiences()$$
-);
-
-DO $$
-DECLARE
-  _job_id bigint;
-BEGIN
-  SELECT jobid INTO _job_id FROM cron.job WHERE jobname = 'purge-orphaned-memories-daily';
-  IF _job_id IS NOT NULL THEN PERFORM cron.unschedule(_job_id); END IF;
-END;
-$$;
-
-SELECT cron.schedule(
-  'purge-orphaned-memories-daily',
-  '30 5 * * *',
-  $$SELECT public.purge_orphaned_memories()$$
 );

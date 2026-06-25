@@ -24,6 +24,7 @@ import { useI18n } from '@/i18n';
 import { formatExperienceRange } from '@/lib/experience-dates';
 import { uploadMemoryPhoto } from '@/lib/memory-photos';
 import {
+  deleteMemoryPhoto,
   getMemory,
   getMemoryPhotoSignedUrl,
   leaveMemory,
@@ -37,6 +38,7 @@ import {
   MemoryMedia,
   MemoryParticipant,
   isMemoryParticipantActive,
+  memoryParticipantDisplayName,
 } from '@/types/memory';
 
 export default function MemoryDetailScreen() {
@@ -112,10 +114,10 @@ export default function MemoryDetailScreen() {
   );
 
   function participantLabel(participant: MemoryParticipant): string {
-    if (participant.user_id === null) {
-      return t('memories.participant.deletedUser');
-    }
-    return participant.display_name ?? participant.username ?? t('memories.participant.unknown');
+    return memoryParticipantDisplayName(participant, {
+      deletedUser: t('memories.participant.deletedUser'),
+      unknown: t('memories.participant.unknown'),
+    });
   }
 
   function activeParticipantsExcludingSelf(): MemoryParticipant[] {
@@ -187,6 +189,39 @@ export default function MemoryDetailScreen() {
       return;
     }
 
+    await loadMemory();
+  }
+
+  function handleDeletePhotoPress(item: MemoryMedia) {
+    if (!memory || actionLoading) return;
+
+    Alert.alert(t('memories.deleteConfirm.title'), t('memories.deleteConfirm.message'), [
+      { text: t('memories.deleteConfirm.cancel'), style: 'cancel' },
+      {
+        text: t('memories.deleteConfirm.confirm'),
+        style: 'destructive',
+        onPress: () => {
+          void runDeletePhoto(item);
+        },
+      },
+    ]);
+  }
+
+  async function runDeletePhoto(item: MemoryMedia) {
+    if (!memory) return;
+
+    setActionLoading(true);
+    setActionError(null);
+
+    const result = await deleteMemoryPhoto(item.id);
+    setActionLoading(false);
+
+    if (result.error) {
+      setActionError(t('memories.error.deletePhoto'));
+      return;
+    }
+
+    setPhotoViewerOpen(false);
     await loadMemory();
   }
 
@@ -400,12 +435,16 @@ export default function MemoryDetailScreen() {
 
       <MemoryPhotoViewer
         visible={photoViewerOpen}
+        memory={memory ?? { am_leader: false }}
         media={media}
         photoUrls={photoUrls}
         participants={participants}
         initialIndex={photoViewerIndex}
         localeTag={localeTag}
+        myUserId={myUserId}
+        deleteLoading={actionLoading}
         onClose={() => setPhotoViewerOpen(false)}
+        onDeletePhoto={memory ? handleDeletePhotoPress : undefined}
       />
     </Screen>
   );

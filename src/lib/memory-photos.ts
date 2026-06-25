@@ -2,7 +2,7 @@ import { registerMemoryPhoto } from '@/lib/memories';
 import { supabase } from '@/lib/supabase';
 
 /** Bucket + DB accept only jpeg/png/webp. Map picker quirks (heic, jpg) to supported types. */
-export function normalizeMemoryPhotoMime(mimeType: string | null | undefined): string {
+function normalizeMemoryPhotoMime(mimeType: string | null | undefined): string {
   if (mimeType === 'image/png') return 'image/png';
   if (mimeType === 'image/webp') return 'image/webp';
   return 'image/jpeg';

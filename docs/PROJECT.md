@@ -144,12 +144,14 @@ Priorities:
 
 Do not add dependencies without a clear reason.
 
+Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
+
 ---
 
 # Current status
 
 Phase:
-Identity and social foundation complete. Core domain in progress — **M12 Experiences complete**, preparing for **M13 Memories**.
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, and **M13.5 cleanup** complete (photo delete UI, server-side storage lifecycle, squashed M13 migrations). **M14** next (shared experiences).
 
 Created by:
 Luis Llamas Ramón
@@ -168,6 +170,7 @@ Completed milestones:
 10. Social user discovery (Search tab, global user search, public profiles, RLS/RPC). ✓
 11. Friend relationships (mutual friendships, requests, Profile friends list). ✓
 12. Experience plans (dated private plans, cancel/remove, Home UI, structured location). ✓
+13. Memories (transform lifecycle, Profile feed/detail, photos, storage cleanup, leave memory). ✓
 
 ---
 
@@ -688,11 +691,18 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 | Bucket | Path convention | Deleted when |
 |--------|-----------------|--------------|
 | `avatars` | `{user_id}/…` | Account delete → `cleanup-user-storage` Edge Function (pg_net trigger on `profiles` DELETE) |
-| `memories` | `{memory_id}/{media_id}.ext` | Single photo → `delete_memory_photo` RPC + client `storage.remove(path)`; **whole memory** → `DELETE memories` → pg_net → `cleanup-memory-storage` removes `{memory_id}/` folder |
+| `memories` | `{memory_id}/{media_id}.ext` | Single photo → `delete_memory_photo` RPC → `DELETE memory_media` → pg_net → `cleanup-memory-storage` (single path); **whole memory** → `DELETE memories` → pg_net → folder cleanup |
 
-**Memory storage cleanup (M13):** `AFTER DELETE ON memories` queues `cleanup-memory-storage` (same Vault/pg_net pattern as avatars). Runs after the transaction commits — cleanup failure never rolls back memory deletion. Idempotent if folder already empty.
+**Memory storage cleanup:** Both use the same Edge Function (`cleanup-memory-storage`) via pg_net after commit — never client `storage.remove` for lifecycle deletes.
 
-**Shared memories:** Memory row (and Storage folder) are **kept** while any active participant remains. Trigger fires only when the memory **entity** is deleted (last leave, orphan purge, solo account-delete purge, admin delete, cron). M14+ shared leave/delete paths inherit this — no client-side batch cleanup.
+| Trigger | Payload | Storage action |
+|---------|---------|----------------|
+| `AFTER DELETE ON memory_media` | `old.storage_path` | Remove one file |
+| `AFTER DELETE ON memories` | `old.id` | Remove `{memory_id}/` folder |
+
+**Photo delete permissions (`delete_memory_photo` RPC):** uploader always; memory leader on any photo. UI in photo viewer (M13.5).
+
+**Shared memories:** Memory row and folder stay while active participants remain. Entity delete only when last participant leaves, orphan purge, etc.
 
 **Rule:** Never store `{user_id}/…` paths in `memories` bucket — media belongs to the shared memory, not the uploader folder.
 
@@ -768,13 +778,28 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Milestone 13 — Memories** — in progress. Database, transform lifecycle, Profile memories UI, experience ↔ memory text limits aligned.
+**Milestone 13.5 — Cleanup** — photo delete UI, server-side single-file storage cleanup, M13 migration squash, docs sync. Awaiting final smoke test before commit.
 
-Applied migrations (when validated): `20260625100000_memories_foundation.sql`, `20260625110000_memories_storage.sql`, `20260625120000_m13_validation_fixes.sql`, `20260625130000_memory_cascade_orphan_cleanup.sql`, `20260625140000_account_delete_memory_purge.sql`, `20260625150000_fix_memory_read_rpc_ambiguity.sql`, `20260625160000_pure_memory_read_rpcs.sql`, `20260625170000_fix_memory_participants_rls_recursion.sql`, `20260625180000_fix_memories_storage_policies.sql`, `20260625190000_memory_storage_cleanup.sql`.
+**Milestone 14 — Shared experiences** — next product milestone.
 
-**Planned M13.5 (after M13 validated + committed):** Squash/replace patch-only migrations (e.g. 251500 → superseded by 251600) into a clean linear history for fresh installs. Do not rewrite history on remotes that already applied the chain unless we coordinate a reset; goal is fewer redundant files in repo, not risky force-migration on production.
+### M13 migrations (squashed — 4 files)
 
-**Post-M13 follow-up (not blocking commit):** Delete individual photos from memory detail — `delete_memory_photo` RPC + storage remove exist; UI not shipped in M13.
+See `supabase/MIGRATIONS.md`. Fresh install runs four intentional migrations after M12:
+
+| Version | File | Purpose |
+|---------|------|---------|
+| `251000` | `memories_foundation.sql` | Tables, RLS, helpers, transform, read/write RPCs, experience guards, transform cron |
+| `251100` | `memories_storage.sql` | Private `memories` bucket + storage RLS |
+| `251200` | `memories_lifecycle.sql` | CASCADE audit, orphan purge, account-delete handler, daily maintenance cron |
+| `251300` | `memories_storage_cleanup.sql` | `DELETE memories` → folder cleanup; `DELETE memory_media` → file cleanup |
+
+### M13.5 product + security changes
+
+- Photo delete in `MemoryPhotoViewer` (uploader or leader); confirm in memory detail
+- `delete_memory_photo` RPC only — no client-side `storage.remove`
+- `cleanup-memory-storage` Edge Function — folder mode + single-file mode (pg_net triggers in `251300`)
+- Migration squash (11 → 4 M13 files) + remote reset
+- RPC EXECUTE audit (`251400`) — see `docs/SECURITY.md`
 
 ---
 
@@ -831,6 +856,7 @@ Run after `npx supabase db push` on linked Supabase.
 - [ ] Add photo from library → appears in gallery (signed URL)
 - [ ] Tap photo thumbnail → full-size viewer; swipe between photos; close returns to detail
 - [ ] Viewer shows uploader name (or Deleted user) and upload date
+- [ ] Uploader can delete own photo; leader can delete any photo; Storage file removed (Edge Function log)
 - [ ] Personal note saves and reloads (private)
 - [ ] Leave memory → removed from list; solo memory purges entirely
 - [ ] Solo memory purge → `memories/{memory_id}/` folder removed from Storage (pg_net → `cleanup-memory-storage` logs)

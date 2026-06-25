@@ -13,39 +13,33 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useI18n } from '@/i18n';
-import { MemoryMedia, MemoryParticipant } from '@/types/memory';
+import {
+  Memory,
+  MemoryMedia,
+  MemoryParticipant,
+  canDeleteMemoryPhoto,
+  memoryMediaUploaderDisplayName,
+} from '@/types/memory';
 
 const CLOSE_HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
 
 type Props = {
   visible: boolean;
+  memory: Pick<Memory, 'am_leader'>;
   media: MemoryMedia[];
   photoUrls: Record<string, string>;
   participants: MemoryParticipant[];
   initialIndex: number;
   localeTag: string;
+  myUserId: string | null;
+  deleteLoading?: boolean;
   onClose: () => void;
+  onDeletePhoto?: (media: MemoryMedia) => void;
 };
-
-function uploaderLabel(
-  item: MemoryMedia,
-  participants: MemoryParticipant[],
-  t: ReturnType<typeof useI18n>['t'],
-): string {
-  if (item.uploaded_by_user_id === null) {
-    return t('memories.participant.deletedUser');
-  }
-
-  const match = participants.find((p) => p.user_id === item.uploaded_by_user_id);
-  if (!match || match.user_id === null) {
-    return t('memories.participant.deletedUser');
-  }
-
-  return match.display_name ?? match.username ?? t('memories.participant.unknown');
-}
 
 function formatUploadDate(iso: string, localeTag: string): string {
   return new Intl.DateTimeFormat(localeTag, {
@@ -56,18 +50,27 @@ function formatUploadDate(iso: string, localeTag: string): string {
 
 export function MemoryPhotoViewer({
   visible,
+  memory,
   media,
   photoUrls,
   participants,
   initialIndex,
   localeTag,
+  myUserId,
+  deleteLoading = false,
   onClose,
+  onDeletePhoto,
 }: Props) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const listRef = useRef<FlatList<MemoryMedia>>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  const participantLabels = {
+    deletedUser: t('memories.participant.deletedUser'),
+    unknown: t('memories.participant.unknown'),
+  };
 
   useEffect(() => {
     if (!visible || media.length === 0) return;
@@ -95,6 +98,11 @@ export function MemoryPhotoViewer({
 
   const safeIndex = Math.min(Math.max(0, currentIndex), media.length - 1);
   const activeItem = media[safeIndex];
+  const canDelete =
+    activeItem &&
+    onDeletePhoto &&
+    canDeleteMemoryPhoto(activeItem, memory, myUserId) &&
+    !deleteLoading;
 
   return (
     <Modal
@@ -184,11 +192,21 @@ export function MemoryPhotoViewer({
             ]}
           >
             <Text variant="body" style={styles.metadataPrimary}>
-              {uploaderLabel(activeItem, participants, t)}
+              {memoryMediaUploaderDisplayName(activeItem, participants, participantLabels)}
             </Text>
             <Text variant="caption" style={styles.metadataSecondary}>
               {formatUploadDate(activeItem.created_at, localeTag)}
             </Text>
+
+            {canDelete ? (
+              <Button
+                label={t('memories.photoViewer.delete')}
+                variant="destructive"
+                onPress={() => onDeletePhoto?.(activeItem)}
+                loading={deleteLoading}
+                style={styles.deleteButton}
+              />
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -249,5 +267,9 @@ const styles = StyleSheet.create({
   },
   metadataSecondary: {
     color: '#AAAAAA',
+  },
+  deleteButton: {
+    marginTop: Spacing.sm,
+    alignSelf: 'flex-start',
   },
 });
