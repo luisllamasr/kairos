@@ -1,7 +1,5 @@
 export type MemoryPermissionPolicy = 'all_participants' | 'leader_only';
 
-export type MemoryParticipantRole = 'organizer' | 'participant';
-
 export type MemoryListItem = {
   id: string;
   title: string;
@@ -31,12 +29,12 @@ export type Memory = {
 export type MemoryParticipant = {
   participant_id: string;
   user_id: string | null;
-  role: MemoryParticipantRole;
   joined_at: string;
   left_at: string | null;
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  is_leader: boolean;
 };
 
 export type MemoryMedia = {

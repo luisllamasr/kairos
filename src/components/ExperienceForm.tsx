@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ExperienceDateTimeField } from '@/components/ExperienceDateTimeField';
+import { ExperienceFriendPicker } from '@/components/ExperienceFriendPicker';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
@@ -31,6 +32,7 @@ interface Props {
   initialValues?: Partial<ExperienceFormValues>;
   submitLabel: string;
   loading?: boolean;
+  showFriendInvites?: boolean;
   onSubmit: (values: ExperienceFormValues) => Promise<void>;
   onCancel: () => void;
 }
@@ -39,6 +41,7 @@ export function ExperienceForm({
   initialValues,
   submitLabel,
   loading = false,
+  showFriendInvites = false,
   onSubmit,
   onCancel,
 }: Props) {
@@ -60,6 +63,7 @@ export function ExperienceForm({
   const [location, setLocation] = useState(initialValues?.locationName ?? '');
   const [startsAt, setStartsAt] = useState(initialStart);
   const [endsAt, setEndsAt] = useState(initialEnd);
+  const [inviteeIds, setInviteeIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const localeTag = locale === 'es' ? 'es-ES' : 'en-US';
@@ -107,6 +111,7 @@ export function ExperienceForm({
       locationName: trimmedLocation || null,
       startsAt: toIsoString(startsAt),
       endsAt: toIsoString(endsAt),
+      inviteeIds: showFriendInvites && inviteeIds.length > 0 ? inviteeIds : undefined,
     });
   }
 
@@ -162,6 +167,16 @@ export function ExperienceForm({
         {t('experiences.endsAt.hint')}
       </Text>
 
+      {showFriendInvites ? (
+        <View style={styles.inviteSection}>
+          <Text variant="subtitle">{t('experiences.invites.createLabel')}</Text>
+          <Text variant="caption" style={styles.inviteHint}>
+            {t('experiences.invites.createHint')}
+          </Text>
+          <ExperienceFriendPicker selectedIds={inviteeIds} onChange={setInviteeIds} />
+        </View>
+      ) : null}
+
       {error && (
         <Text variant="error" style={styles.error}>
           {error}
@@ -191,6 +206,13 @@ const styles = StyleSheet.create({
   },
   endsHint: {
     marginBottom: Spacing.sm,
+  },
+  inviteSection: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  inviteHint: {
+    marginBottom: Spacing.xs,
   },
   error: {
     marginBottom: Spacing.sm,

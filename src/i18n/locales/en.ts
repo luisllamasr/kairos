@@ -6,7 +6,6 @@ export const en = {
   'auth.signIn.rateLimited': 'For security, wait {{seconds}}s before requesting another code.',
   'auth.signIn.error.invalidEmail': 'Please enter a valid email address.',
   'auth.signIn.error.alreadyActive': 'This account is already active on this device.',
-  'auth.signIn.error.alreadyStored': 'This account is already on this device.',
   'auth.signIn.error.alreadySignedIn':
     'This account is already signed in on this device. Switch accounts from Profile.',
   'auth.signIn.reauth.subtitle': 'Sign back in as {{name}}.',
@@ -35,6 +34,7 @@ export const en = {
   'home.empty': 'No upcoming plans yet.',
   'home.emptyHint': 'Plan something worth remembering.',
   'home.loadError': 'Could not load your plans. Please try again.',
+  'home.invitationsWithCount': 'Experience invitations ({{count}})',
 
   'experiences.back': 'Back',
   'experiences.title.placeholder': 'What are you planning?',
@@ -48,6 +48,7 @@ export const en = {
   'experiences.dateTime.cancel': 'Cancel',
   'experiences.form.cancel': 'Cancel',
   'experiences.status.cancelled': 'Cancelled',
+  'experiences.status.becomingMemory': 'Becoming a memory…',
 
   'experiences.create.title': 'New experience',
   'experiences.create.submit': 'Create plan',
@@ -57,8 +58,7 @@ export const en = {
 
   'experiences.detail.transformNotice':
     'After your plan ends, Kairos will create a memory automatically.',
-  'experiences.detail.endedNotice':
-    'This plan has ended. Opening your memory…',
+  'experiences.detail.endedNotice': 'Becoming a memory…',
   'experiences.detail.edit': 'Edit plan',
   'experiences.detail.cancelPlan': 'Cancel plan',
   'experiences.detail.remove': 'Remove plan',
@@ -89,6 +89,89 @@ export const en = {
   'experiences.error.locationTooLong': 'Location must be 200 characters or fewer.',
   'experiences.error.notUpcoming': 'This plan can no longer be edited.',
 
+  'experiences.participants.title': 'Participants',
+  'experiences.participants.leader': 'Leader',
+  'experiences.participants.remove': 'Remove',
+  'experiences.participants.menuCancel': 'Cancel',
+  'experiences.participants.openMenu': 'Actions for {{name}}',
+  'experiences.participants.unknown': 'Unknown',
+
+  'experiences.detail.leave': 'Leave plan',
+  'experiences.detail.revive': 'Revive plan',
+  'experiences.detail.transferLeadership': 'Transfer leadership',
+
+  'experiences.leaveConfirm.title': 'Leave this plan?',
+  'experiences.leaveConfirm.message':
+    'You will no longer be part of this plan. It stays active for everyone else.',
+  'experiences.leaveConfirm.confirm': 'Leave plan',
+  'experiences.leaveConfirm.cancel': 'Cancel',
+  'experiences.leaveConfirm.leaderMustTransferTitle': "Can't leave while you're the leader",
+  'experiences.leaveConfirm.leaderMustTransferMessage':
+    "You can't leave this plan while you are the leader. Transfer leadership using the ⋮ menu on another participant first, then you can leave.",
+  'experiences.leaveConfirm.leaderMustTransferOk': 'OK',
+
+  'experiences.reviveConfirm.title': 'Revive this plan?',
+  'experiences.reviveConfirm.message':
+    'This plan will become active again. You will become the leader.',
+  'experiences.reviveConfirm.confirm': 'Revive plan',
+  'experiences.reviveConfirm.cancel': 'Cancel',
+
+  'experiences.removeParticipantConfirm.title': 'Remove participant?',
+  'experiences.removeParticipantConfirm.message': '{{name}} will be removed from this plan.',
+  'experiences.removeParticipantConfirm.confirm': 'Remove',
+  'experiences.removeParticipantConfirm.cancel': 'Cancel',
+
+  'experiences.transferConfirm.title': 'Transfer leadership',
+  'experiences.transferConfirm.messageTo': '{{name}} will become the leader of this plan.',
+  'experiences.transferConfirm.confirm': 'Transfer',
+  'experiences.transferConfirm.cancel': 'Cancel',
+
+  'experiences.invites.back': 'Back',
+  'experiences.invites.screenTitle': 'Experience invitations',
+  'experiences.invites.screenSubtitle': 'Plans your friends want to share with you.',
+  'experiences.invites.empty': 'No pending invitations.',
+  'experiences.invites.loadError': 'Could not load invitations. Please try again.',
+  'experiences.invites.accept': 'Accept',
+  'experiences.invites.decline': 'Decline',
+  'experiences.invites.incomingTitle': '{{name}} invited you to {{title}}',
+  'experiences.invites.unknownUser': 'Someone',
+  'experiences.invites.createLabel': 'Invite friends (optional)',
+  'experiences.invites.createHint': 'Only your friends can be invited to private plans.',
+  'experiences.invites.selected': 'Selected',
+  'experiences.invites.friendsLoadError': 'Could not load your friends.',
+  'experiences.invites.noFriends': 'Add friends to invite them to plans.',
+  'experiences.invites.noFriendsAvailable': 'No friends available to invite here.',
+  'experiences.invites.inviteFriend': 'Invite a friend',
+  'experiences.invites.hidePicker': 'Hide friend list',
+  'experiences.invites.send': 'Send invitation',
+  'experiences.invites.pendingTitle': 'Pending invitations',
+  'experiences.invites.pendingStatus': 'Waiting for response',
+  'experiences.detail.invitationNotice':
+    'You have been invited to this plan. Accept to join or decline to dismiss.',
+  'experiences.detail.invitationAcceptError':
+    'Could not accept this invitation. Please try again.',
+  'experiences.detail.invitationDeclineError':
+    'Could not decline this invitation. Please try again.',
+
+  'experiences.suggestions.suggestFriend': 'Suggest a friend',
+  'experiences.suggestions.submit': 'Send suggestion',
+  'experiences.suggestions.pendingTitle': 'Suggested invites',
+  'experiences.suggestions.row': '{{suggester}} suggested {{friend}}',
+  'experiences.suggestions.approve': 'Approve',
+  'experiences.suggestions.reject': 'Reject',
+
+  'experiences.notifications.mute': 'Mute notifications for this plan',
+  'experiences.notifications.unmute': 'Unmute notifications for this plan',
+
+  'experiences.error.leave': 'Could not leave this plan. Please try again.',
+  'experiences.error.revive': 'Could not revive this plan. Please try again.',
+  'experiences.error.removeParticipant': 'Could not remove this participant. Please try again.',
+  'experiences.error.transfer': 'Could not transfer leadership. Please try again.',
+  'experiences.error.invite': 'Could not send this invitation. Please try again.',
+  'experiences.error.suggest': 'Could not send this suggestion. Please try again.',
+  'experiences.error.reviewSuggestion': 'Could not review this suggestion. Please try again.',
+  'experiences.error.mute': 'Could not update notification settings. Please try again.',
+
   // Rules describe the field constraints — shared between onboarding and edit profile.
   'profile.username.rules.length': '· 3–30 characters',
   'profile.username.rules.chars': '· Lowercase letters, numbers, . _ and -',
@@ -101,8 +184,6 @@ export const en = {
   'profile.memoriesSection.search': 'Search',
   'profile.memoriesSection.empty':
     "You don't have memories yet. Experiences will appear here after you live them.",
-  'profile.friends': 'Friends',
-  'profile.friendRequests': 'Friend requests',
   'profile.friendRequestsWithCount': 'Friend requests ({{count}})',
   'profile.switchAccount': 'Switch account',
   'profile.deleteAccount': 'Delete account',
@@ -225,6 +306,10 @@ export const en = {
   'memories.detail.personalNotePlaceholder': 'Your thoughts about this moment…',
   'memories.detail.saveNote': 'Save note',
   'memories.detail.leave': 'Leave memory',
+  'memories.detail.transferLeadership': 'Transfer leadership',
+
+  'memories.participants.openMenu': 'Actions for {{name}}',
+  'memories.participants.menuCancel': 'Cancel',
 
   'memories.participant.deletedUser': 'Deleted user',
   'memories.participant.unknown': 'Unknown',
@@ -245,9 +330,16 @@ export const en = {
     'You will lose access to this memory. Others can still see the shared moment.',
   'memories.leaveConfirm.confirm': 'Leave memory',
   'memories.leaveConfirm.cancel': 'Keep',
-  'memories.leaveConfirm.leaderTitle': 'Choose a new leader',
-  'memories.leaveConfirm.leaderMessage':
-    'You are the leader. Pick who should take over before you leave.',
+  'memories.leaveConfirm.leaderMustTransferTitle': "Can't leave while you're the leader",
+  'memories.leaveConfirm.leaderMustTransferMessage':
+    "You can't leave this memory while you are the leader. Transfer leadership using the ⋮ menu on another participant first, then you can leave.",
+  'memories.leaveConfirm.leaderMustTransferOk': 'OK',
+
+  'memories.transferConfirm.title': 'Transfer leadership',
+  'memories.transferConfirm.messageTo': '{{name}} will become the leader of this memory.',
+
+  'memories.transferConfirm.confirm': 'Transfer',
+  'memories.transferConfirm.cancel': 'Cancel',
 
   'memories.error.saveNote': 'Could not save your note. Please try again.',
   'memories.error.noteTooLong': 'Note must be 1,000 characters or fewer.',
@@ -255,6 +347,7 @@ export const en = {
   'memories.error.deletePhoto': 'Could not delete this photo. Please try again.',
   'memories.error.photoPermission': 'Photo library access is required to add a photo.',
   'memories.error.leave': 'Could not leave this memory. Please try again.',
+  'memories.error.transfer': 'Could not transfer leadership. Please try again.',
 
   'error.profileLoad': 'Could not load your profile',
   'error.retry': 'Try again',

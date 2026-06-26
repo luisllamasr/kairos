@@ -1,7 +1,8 @@
 import { RelationshipStatus } from '@/types/relationship';
 
-/** Fields exposed by search_profiles / get_public_profile RPCs. */
+/** Fields exposed by search_profiles / get_public_profile / list_friends RPCs. */
 export type PublicProfile = {
+  user_id?: string;
   username: string;
   display_name: string | null;
   avatar_url: string | null;

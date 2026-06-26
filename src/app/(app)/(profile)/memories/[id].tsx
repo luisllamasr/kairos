@@ -13,6 +13,7 @@ import {
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
+import { MemoryParticipantActionsMenu } from '@/components/MemoryParticipantActionsMenu';
 import { MemoryPhotoViewer } from '@/components/MemoryPhotoViewer';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -30,6 +31,7 @@ import {
   leaveMemory,
   listMemoryMedia,
   listMemoryParticipants,
+  transferMemoryLeadership,
   updateMyMemoryNote,
 } from '@/lib/memories';
 import { getAvatarPublicUrl } from '@/lib/profile';
@@ -225,12 +227,12 @@ export default function MemoryDetailScreen() {
     await loadMemory();
   }
 
-  async function runLeave(newLeaderId?: string | null) {
+  async function runLeave() {
     if (!memory) return;
 
     setActionLoading(true);
     setActionError(null);
-    const result = await leaveMemory(memory.id, newLeaderId);
+    const result = await leaveMemory(memory.id);
     setActionLoading(false);
 
     if (result.error) {
@@ -241,24 +243,32 @@ export default function MemoryDetailScreen() {
     router.replace('/(app)/(profile)/memories');
   }
 
+  async function runTransfer(newLeaderId: string) {
+    if (!memory) return;
+
+    setActionLoading(true);
+    setActionError(null);
+    const result = await transferMemoryLeadership(memory.id, newLeaderId);
+    setActionLoading(false);
+
+    if (result.error) {
+      setActionError(t('memories.error.transfer'));
+      return;
+    }
+
+    await loadMemory();
+  }
+
   function handleLeavePress() {
     if (!memory || actionLoading) return;
 
-    const successorCandidates = memory.am_leader ? activeParticipantsExcludingSelf() : [];
+    const successorCandidates = activeParticipantsExcludingSelf();
 
-    if (successorCandidates.length > 0) {
+    if (memory.am_leader && successorCandidates.length > 0) {
       Alert.alert(
-        t('memories.leaveConfirm.leaderTitle'),
-        t('memories.leaveConfirm.leaderMessage'),
-        [
-          { text: t('memories.leaveConfirm.cancel'), style: 'cancel' },
-          ...successorCandidates.map((candidate) => ({
-            text: participantLabel(candidate),
-            onPress: () => {
-              void runLeave(candidate.user_id);
-            },
-          })),
-        ],
+        t('memories.leaveConfirm.leaderMustTransferTitle'),
+        t('memories.leaveConfirm.leaderMustTransferMessage'),
+        [{ text: t('memories.leaveConfirm.leaderMustTransferOk') }],
       );
       return;
     }
@@ -273,6 +283,24 @@ export default function MemoryDetailScreen() {
         },
       },
     ]);
+  }
+
+  function handleTransferParticipantPress(participant: MemoryParticipant) {
+    if (!memory || actionLoading || participant.user_id === null) return;
+
+    Alert.alert(
+      t('memories.transferConfirm.title'),
+      t('memories.transferConfirm.messageTo', { name: participantLabel(participant) }),
+      [
+        { text: t('memories.transferConfirm.cancel'), style: 'cancel' },
+        {
+          text: t('memories.transferConfirm.confirm'),
+          onPress: () => {
+            void runTransfer(participant.user_id!);
+          },
+        },
+      ],
+    );
   }
 
   const activeParticipants = participants.filter(isMemoryParticipantActive);
@@ -337,10 +365,20 @@ export default function MemoryDetailScreen() {
                   />
                   <View style={styles.participantText}>
                     <Text variant="body">{participantLabel(participant)}</Text>
-                    {memory.leader_id !== null && participant.user_id === memory.leader_id ? (
+                    {participant.is_leader ? (
                       <Text variant="caption">{t('memories.detail.leader')}</Text>
                     ) : null}
                   </View>
+                  {memory.am_leader &&
+                  participant.user_id !== null &&
+                  !participant.is_leader &&
+                  participant.user_id !== myUserId ? (
+                    <MemoryParticipantActionsMenu
+                      participantName={participantLabel(participant)}
+                      disabled={actionLoading}
+                      onTransfer={() => handleTransferParticipantPress(participant)}
+                    />
+                  ) : null}
                 </View>
               ))}
             </View>
@@ -494,7 +532,7 @@ const styles = StyleSheet.create({
   participantRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
     marginBottom: Spacing.xs,
   },
   participantText: {

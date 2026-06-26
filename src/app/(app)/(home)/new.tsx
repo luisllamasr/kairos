@@ -41,6 +41,7 @@ export default function NewExperienceScreen() {
       <ExperienceForm
         submitLabel={t('experiences.create.submit')}
         loading={loading}
+        showFriendInvites
         onSubmit={handleSubmit}
         onCancel={() => router.back()}
       />

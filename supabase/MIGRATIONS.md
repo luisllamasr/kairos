@@ -22,6 +22,26 @@ npx supabase functions deploy cleanup-memory-storage
 
 Pre-M13 chain is unchanged (`170000` profiles → `241100` experiences).
 
+## M14 shared experiences chain
+
+| Version | File | Purpose |
+|---------|------|---------|
+| `261000` | `shared_experiences_schema.sql` | Participants, invitations, suggestions, declines, edit policy, RLS, account-delete handler |
+| `261100` | `shared_experiences_core_rpcs.sql` | Invites, leave/remove/transfer, list RPCs, create with optional invitees |
+| `261200` | `shared_experiences_lifecycle.sql` | Edit policy, cancel/delete/revive, multi-participant transform |
+| `261300` | `shared_experiences_suggestions.sql` | Suggest-invite + leader review RPCs |
+| `261400` | `notifications_foundation.sql` | Notifications table, enqueue, mute, list/mark-read; wired into lifecycle RPCs |
+| `261500` | `m14_client_read_helpers.sql` | `list_friends` returns `user_id`; `get_experience` returns `notifications_muted` |
+| `261600` | `invitation_read_and_lifecycle.sql` | Pending-invitee RLS, DELETE-on-resolve social rows, notification purge helpers |
+| `261601` | `transform_rpc_grant_fix.sql` | Revoke accidental client grant on internal transform RPC |
+| `261602` | `experience_viewer_role.sql` | Viewer role flags on `get_experience`; pending invitee participant list access |
+| `261603` | `experience_purge_eager.sql` | `purge_my_stale_experiences()` + bundle `purge_stale_experiences()` into 15 min cron |
+| `261604` | `cancelled_experience_permissions.sql` | No leader permissions while cancelled; leave without transfer; delete planned only |
+| `261605` | `transform_visibility.sql` | Fix `transform_my_due_experiences`; Home lists planned until transform DELETE |
+| `261606` | `memory_transfer_leadership_client.sql` | Grant `transfer_memory_leadership` to clients with leader check |
+| `261607` | `drop_participant_role.sql` | Drop participant `role` columns + enum; leadership SSOT is `organizer_id` / `leader_id` |
+| `261608` | `purge_my_stale_experiences_fix.sql` | Fix `purge_my_stale_experiences` (`DISTINCT` + `FOR UPDATE` runtime error) |
+
 Security model: `docs/SECURITY.md`.
 
 ## Storage lifecycle

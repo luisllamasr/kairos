@@ -8,7 +8,6 @@ export const es: Record<TranslationKey, string> = {
   'auth.signIn.rateLimited': 'Por seguridad, espera {{seconds}}s antes de pedir otro código.',
   'auth.signIn.error.invalidEmail': 'Introduce una dirección de correo válida.',
   'auth.signIn.error.alreadyActive': 'Esta cuenta ya está activa en este dispositivo.',
-  'auth.signIn.error.alreadyStored': 'Esta cuenta ya está en este dispositivo.',
   'auth.signIn.error.alreadySignedIn':
     'Esta cuenta ya tiene sesión iniciada en este dispositivo. Cambia de cuenta desde Perfil.',
   'auth.signIn.reauth.subtitle': 'Vuelve a iniciar sesión como {{name}}.',
@@ -37,6 +36,7 @@ export const es: Record<TranslationKey, string> = {
   'home.empty': 'Aún no tienes planes.',
   'home.emptyHint': 'Planea algo que merezca ser recordado.',
   'home.loadError': 'No se pudieron cargar tus planes. Por favor, inténtalo de nuevo.',
+  'home.invitationsWithCount': 'Invitaciones a experiencias ({{count}})',
 
   'experiences.back': 'Atrás',
   'experiences.title.placeholder': '¿Qué estás planeando?',
@@ -50,6 +50,7 @@ export const es: Record<TranslationKey, string> = {
   'experiences.dateTime.cancel': 'Cancelar',
   'experiences.form.cancel': 'Cancelar',
   'experiences.status.cancelled': 'Cancelado',
+  'experiences.status.becomingMemory': 'Convirtiéndose en recuerdo…',
 
   'experiences.create.title': 'Nueva experiencia',
   'experiences.create.submit': 'Crear plan',
@@ -59,8 +60,7 @@ export const es: Record<TranslationKey, string> = {
 
   'experiences.detail.transformNotice':
     'Cuando termine tu plan, Kairos creará un recuerdo automáticamente.',
-  'experiences.detail.endedNotice':
-    'Este plan ha terminado. Abriendo tu recuerdo…',
+  'experiences.detail.endedNotice': 'Convirtiéndose en recuerdo…',
   'experiences.detail.edit': 'Editar plan',
   'experiences.detail.cancelPlan': 'Cancelar plan',
   'experiences.detail.remove': 'Quitar plan',
@@ -91,6 +91,89 @@ export const es: Record<TranslationKey, string> = {
   'experiences.error.locationTooLong': 'La ubicación debe tener 200 caracteres o menos.',
   'experiences.error.notUpcoming': 'Este plan ya no se puede editar.',
 
+  'experiences.participants.title': 'Participantes',
+  'experiences.participants.leader': 'Líder',
+  'experiences.participants.remove': 'Quitar',
+  'experiences.participants.menuCancel': 'Cancelar',
+  'experiences.participants.openMenu': 'Acciones para {{name}}',
+  'experiences.participants.unknown': 'Desconocido',
+
+  'experiences.detail.leave': 'Salir del plan',
+  'experiences.detail.revive': 'Reactivar plan',
+  'experiences.detail.transferLeadership': 'Transferir liderazgo',
+
+  'experiences.leaveConfirm.title': '¿Salir de este plan?',
+  'experiences.leaveConfirm.message':
+    'Ya no formarás parte de este plan. Seguirá activo para los demás.',
+  'experiences.leaveConfirm.confirm': 'Salir del plan',
+  'experiences.leaveConfirm.cancel': 'Cancelar',
+  'experiences.leaveConfirm.leaderMustTransferTitle': 'No puedes salir mientras eres el líder',
+  'experiences.leaveConfirm.leaderMustTransferMessage':
+    'No puedes salir de este plan mientras eres el líder. Primero transfiere el liderazgo con el menú ⋮ de otro participante y después podrás salir.',
+  'experiences.leaveConfirm.leaderMustTransferOk': 'OK',
+
+  'experiences.reviveConfirm.title': '¿Reactivar este plan?',
+  'experiences.reviveConfirm.message':
+    'Este plan volverá a estar activo. Tú serás el líder.',
+  'experiences.reviveConfirm.confirm': 'Reactivar plan',
+  'experiences.reviveConfirm.cancel': 'Cancelar',
+
+  'experiences.removeParticipantConfirm.title': '¿Quitar participante?',
+  'experiences.removeParticipantConfirm.message': '{{name}} será quitado de este plan.',
+  'experiences.removeParticipantConfirm.confirm': 'Quitar',
+  'experiences.removeParticipantConfirm.cancel': 'Cancelar',
+
+  'experiences.transferConfirm.title': 'Transferir liderazgo',
+  'experiences.transferConfirm.messageTo': '{{name}} será el líder de este plan.',
+  'experiences.transferConfirm.confirm': 'Transferir',
+  'experiences.transferConfirm.cancel': 'Cancelar',
+
+  'experiences.invites.back': 'Atrás',
+  'experiences.invites.screenTitle': 'Invitaciones a experiencias',
+  'experiences.invites.screenSubtitle': 'Planes que tus amigos quieren compartir contigo.',
+  'experiences.invites.empty': 'No hay invitaciones pendientes.',
+  'experiences.invites.loadError': 'No se pudieron cargar las invitaciones. Por favor, inténtalo de nuevo.',
+  'experiences.invites.accept': 'Aceptar',
+  'experiences.invites.decline': 'Rechazar',
+  'experiences.invites.incomingTitle': '{{name}} te invitó a {{title}}',
+  'experiences.invites.unknownUser': 'Alguien',
+  'experiences.invites.createLabel': 'Invitar amigos (opcional)',
+  'experiences.invites.createHint': 'Solo tus amigos pueden ser invitados a planes privados.',
+  'experiences.invites.selected': 'Seleccionado',
+  'experiences.invites.friendsLoadError': 'No se pudieron cargar tus amigos.',
+  'experiences.invites.noFriends': 'Agrega amigos para invitarlos a planes.',
+  'experiences.invites.noFriendsAvailable': 'No hay amigos disponibles para invitar aquí.',
+  'experiences.invites.inviteFriend': 'Invitar a un amigo',
+  'experiences.invites.hidePicker': 'Ocultar lista de amigos',
+  'experiences.invites.send': 'Enviar invitación',
+  'experiences.invites.pendingTitle': 'Invitaciones pendientes',
+  'experiences.invites.pendingStatus': 'Esperando respuesta',
+  'experiences.detail.invitationNotice':
+    'Has sido invitado a este plan. Acepta para unirte o rechaza para descartarlo.',
+  'experiences.detail.invitationAcceptError':
+    'No se pudo aceptar la invitación. Por favor, inténtalo de nuevo.',
+  'experiences.detail.invitationDeclineError':
+    'No se pudo rechazar la invitación. Por favor, inténtalo de nuevo.',
+
+  'experiences.suggestions.suggestFriend': 'Sugerir un amigo',
+  'experiences.suggestions.submit': 'Enviar sugerencia',
+  'experiences.suggestions.pendingTitle': 'Invitaciones sugeridas',
+  'experiences.suggestions.row': '{{suggester}} sugirió a {{friend}}',
+  'experiences.suggestions.approve': 'Aprobar',
+  'experiences.suggestions.reject': 'Rechazar',
+
+  'experiences.notifications.mute': 'Silenciar notificaciones de este plan',
+  'experiences.notifications.unmute': 'Activar notificaciones de este plan',
+
+  'experiences.error.leave': 'No se pudo salir de este plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.revive': 'No se pudo reactivar este plan. Por favor, inténtalo de nuevo.',
+  'experiences.error.removeParticipant': 'No se pudo quitar a este participante. Por favor, inténtalo de nuevo.',
+  'experiences.error.transfer': 'No se pudo transferir el liderazgo. Por favor, inténtalo de nuevo.',
+  'experiences.error.invite': 'No se pudo enviar la invitación. Por favor, inténtalo de nuevo.',
+  'experiences.error.suggest': 'No se pudo enviar la sugerencia. Por favor, inténtalo de nuevo.',
+  'experiences.error.reviewSuggestion': 'No se pudo revisar la sugerencia. Por favor, inténtalo de nuevo.',
+  'experiences.error.mute': 'No se pudo actualizar las notificaciones. Por favor, inténtalo de nuevo.',
+
   'profile.username.rules.length': '· 3–30 caracteres',
   'profile.username.rules.chars': '· Solo letras minúsculas, números, . _ y -',
   'profile.username.rules.alphanum': '· Al menos una letra o número',
@@ -102,8 +185,6 @@ export const es: Record<TranslationKey, string> = {
   'profile.memoriesSection.search': 'Buscar',
   'profile.memoriesSection.empty':
     'Aún no tienes recuerdos. Tus experiencias aparecerán aquí después de vivirlas.',
-  'profile.friends': 'Amigos',
-  'profile.friendRequests': 'Solicitudes de amistad',
   'profile.friendRequestsWithCount': 'Solicitudes de amistad ({{count}})',
   'profile.switchAccount': 'Cambiar cuenta',
   'profile.deleteAccount': 'Eliminar cuenta',
@@ -230,6 +311,10 @@ export const es: Record<TranslationKey, string> = {
   'memories.detail.personalNotePlaceholder': 'Tus pensamientos sobre este momento…',
   'memories.detail.saveNote': 'Guardar nota',
   'memories.detail.leave': 'Salir del recuerdo',
+  'memories.detail.transferLeadership': 'Transferir liderazgo',
+
+  'memories.participants.openMenu': 'Acciones para {{name}}',
+  'memories.participants.menuCancel': 'Cancelar',
 
   'memories.participant.deletedUser': 'Usuario eliminado',
   'memories.participant.unknown': 'Desconocido',
@@ -250,9 +335,15 @@ export const es: Record<TranslationKey, string> = {
     'Perderás acceso a este recuerdo. Los demás aún pueden ver el momento compartido.',
   'memories.leaveConfirm.confirm': 'Salir del recuerdo',
   'memories.leaveConfirm.cancel': 'Conservar',
-  'memories.leaveConfirm.leaderTitle': 'Elige un nuevo líder',
-  'memories.leaveConfirm.leaderMessage':
-    'Eres el líder. Elige quién debe hacerse cargo antes de salir.',
+  'memories.leaveConfirm.leaderMustTransferTitle': 'No puedes salir mientras eres el líder',
+  'memories.leaveConfirm.leaderMustTransferMessage':
+    'No puedes salir de este recuerdo mientras eres el líder. Transfiere el liderazgo con el menú ⋮ de otro participante y luego podrás salir.',
+  'memories.leaveConfirm.leaderMustTransferOk': 'OK',
+
+  'memories.transferConfirm.title': 'Transferir liderazgo',
+  'memories.transferConfirm.messageTo': '{{name}} será el líder de este recuerdo.',
+  'memories.transferConfirm.confirm': 'Transferir',
+  'memories.transferConfirm.cancel': 'Cancelar',
 
   'memories.error.saveNote': 'No se pudo guardar tu nota. Por favor, inténtalo de nuevo.',
   'memories.error.noteTooLong': 'La nota debe tener 1.000 caracteres o menos.',
@@ -261,6 +352,7 @@ export const es: Record<TranslationKey, string> = {
   'memories.error.photoPermission':
     'Se necesita acceso a la galería para añadir una foto.',
   'memories.error.leave': 'No se pudo salir de este recuerdo. Por favor, inténtalo de nuevo.',
+  'memories.error.transfer': 'No se pudo transferir el liderazgo. Por favor, inténtalo de nuevo.',
 
   'error.profileLoad': 'No se pudo cargar tu perfil',
   'error.retry': 'Reintentar',

@@ -9,7 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { CreateExperienceInput, getExperience, updateExperience } from '@/lib/experiences';
-import { Experience, isExperienceUpcoming } from '@/types/experience';
+import { Experience, canEditExperience } from '@/types/experience';
 
 export default function EditExperienceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,7 +35,7 @@ export default function EditExperienceScreen() {
     if (loadError || !data) {
       setError(t('experiences.error.load'));
       setExperience(null);
-    } else if (!isExperienceUpcoming(data)) {
+    } else if (!canEditExperience(data)) {
       setError(t('experiences.error.notUpcoming'));
       setExperience(null);
     } else {
@@ -55,7 +55,11 @@ export default function EditExperienceScreen() {
     setSaving(true);
     setError(null);
 
-    const result = await updateExperience({ ...values, id: experience.id });
+    const result = await updateExperience({
+      ...values,
+      id: experience.id,
+      expectedUpdatedAt: experience.updated_at,
+    });
     setSaving(false);
 
     if (result.error) {

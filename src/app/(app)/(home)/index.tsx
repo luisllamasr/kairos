@@ -10,7 +10,8 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
-import { listMyHomeExperiences } from '@/lib/experiences';
+import { listMyHomeExperiences, listIncomingExperienceInvitations, purgeMyStaleExperiences } from '@/lib/experiences';
+import { transformMyDueExperiences } from '@/lib/memories';
 import { ExperienceListItem } from '@/types/experience';
 
 const EDGES: Edge[] = ['top', 'left', 'right'];
@@ -21,6 +22,7 @@ export default function HomeScreen() {
   const colors = useTheme();
 
   const [experiences, setExperiences] = useState<ExperienceListItem[]>([]);
+  const [invitationCount, setInvitationCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -28,9 +30,16 @@ export default function HomeScreen() {
     setLoading(true);
     setError(false);
 
-    const { data, error: loadError } = await listMyHomeExperiences();
-    setExperiences(data);
-    setError(loadError);
+    await transformMyDueExperiences();
+    await purgeMyStaleExperiences();
+
+    const [experiencesResult, invitationsResult] = await Promise.all([
+      listMyHomeExperiences(),
+      listIncomingExperienceInvitations(),
+    ]);
+    setExperiences(experiencesResult.data);
+    setInvitationCount(invitationsResult.error ? 0 : invitationsResult.data.length);
+    setError(experiencesResult.error || invitationsResult.error);
     setLoading(false);
   }, []);
 
@@ -56,6 +65,7 @@ export default function HomeScreen() {
             item={item}
             locale={locale}
             cancelledLabel={t('experiences.status.cancelled')}
+            becomingMemoryLabel={t('experiences.status.becomingMemory')}
             onPress={() =>
               router.push({
                 pathname: '/(app)/(home)/[id]',
@@ -80,6 +90,15 @@ export default function HomeScreen() {
               onPress={() => router.push('/(app)/(home)/new')}
               style={styles.newButton}
             />
+
+            {invitationCount > 0 ? (
+              <Button
+                label={t('home.invitationsWithCount', { count: String(invitationCount) })}
+                variant="secondary"
+                onPress={() => router.push('/(app)/(home)/invitations')}
+                style={styles.invitationsButton}
+              />
+            ) : null}
 
             {loading && (
               <View style={styles.centeredRow}>
@@ -125,6 +144,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   newButton: {
+    marginBottom: Spacing.lg,
+  },
+  invitationsButton: {
     marginBottom: Spacing.lg,
   },
   centeredRow: {

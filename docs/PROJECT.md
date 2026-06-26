@@ -151,7 +151,7 @@ Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
 # Current status
 
 Phase:
-Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, and **M13.5 cleanup** complete (photo delete UI, server-side storage lifecycle, squashed M13 migrations). **M14** next (shared experiences).
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, and **M14 shared experiences** complete (validated + cleanup pass).
 
 Created by:
 Luis Llamas Ramón
@@ -171,6 +171,8 @@ Completed milestones:
 11. Friend relationships (mutual friendships, requests, Profile friends list). ✓
 12. Experience plans (dated private plans, cancel/remove, Home UI, structured location). ✓
 13. Memories (transform lifecycle, Profile feed/detail, photos, storage cleanup, leave memory). ✓
+14. M13.5 cleanup (photo delete, migration squash, security audit). ✓
+15. Shared experiences (M14 — invites, participants, lifecycle, notifications foundation, leadership SSOT cleanup). ✓
 
 ---
 
@@ -218,20 +220,21 @@ Build **Create → Live → Remember** in order. Full milestone breakdown and pr
 | Milestone | Scope |
 |-----------|--------|
 | **12. Experiences** ✓ | Dated private plans; auto `transform_at`; cancel/remove; Home = planned + cancelled-until-purge |
-| **13. Memories** | Shared memory core + personal layer; automatic transform; timeline |
-| **14. Shared experiences** | Friend invites; `organizer_id` transfer; group transform |
+| **13. Memories** ✓ | Shared memory core + personal layer; automatic transform; timeline |
+| **13.5 Cleanup** ✓ | Photo delete, migration squash, storage lifecycle, security audit |
+| **14. Shared experiences** ✓ | Invites, suggest flow, group transform, notifications foundation |
 | **15. Experience chat** | Purpose-bound coordination; not DMs |
 | **16. Public experiences** | Discoverable plans; open join |
 | **17. Join approval** | Request → approve/decline |
 | **18. Opportunities** | Catalog → “Plan this” → experience |
-| **19. Notifications** | Invites, cancels, joins — not growth loops |
+| **19. Notifications UX** | Inbox, badges, push — builds on M14 notification rows |
 
 ## Phase D — Community inspiration (later)
 
 Public discovery at scale, validated catalog content, optional inspiration feeds. Friendships and visibility enums plug in here — not before core domain exists.
 
 ```text
-Identity ✓ → Friends ✓ → Experiences ✓ → Memories → Shared experiences → Chat → Public → Opportunities
+Identity ✓ → Friends ✓ → Experiences ✓ → Memories ✓ → Shared experiences ✓ → Chat → Public → Opportunities
 ```
 
 ---
@@ -275,7 +278,7 @@ A **dated plan** to live a real moment — solo or with others (others in M14).
 - Requires **`starts_at` and `ends_at`** (best estimate; see Time rules).
 - **`visibility`:** `private` (invited participants only) or `public` (discoverable later). No `friends` visibility tier — private plans use explicit invites.
 - **Cancelled** plans remain visible (on Home and detail) until **`purge_at = ends_at + 24 hours`**, then auto-delete. They never become memories.
-- **Planned** plans drop off Home when **`transform_at`** passes (awaiting M13 memory transform).
+- **Planned** plans stay on Home while the **`experiences` row exists** — including after **`transform_at`** passes, until transform DELETEs the row and the memory is created. UI may show **“Becoming a memory…”** during that short window.
 
 ### Live window
 
@@ -288,12 +291,14 @@ Future (M13+): in-window capture (“Save a photo for this memory”) attaches a
 When `transform_at` passes, the experience **transforms** into memory in one transaction:
 
 ```text
-INSERT memories (shared core + leader + policies)
-INSERT memory_participants (one row per participant; M13 solo = organizer)
-DELETE experience
+INSERT memories (shared core + leader + policies from experience)
+INSERT memory_participants (one row per accepted experience participant)
+DELETE experience (+ CASCADE invitations, participants)
 ```
 
 Memory is the **only** long-term source of truth for that moment.
+
+**M14:** transform includes every **accepted** experience participant. Pending invitations do not become memory participants.
 
 ---
 
@@ -304,9 +309,9 @@ Memory is the **only** long-term source of truth for that moment.
 | Time role | Future / present | Past |
 | User job | Plan, coordinate | Remember, reflect |
 | Lifetime | Ephemeral | Persistent |
-| Home tab | Upcoming + cancelled-until-purge plans | **Profile** — memories list (M13+) |
+| Home tab | Active plans (until transform DELETE) + cancelled-until-purge | **Profile** — memories list (M13+) |
 | Content | Title, description, location, schedule | Shared title, description, location, when + photos + **personal notes** |
-| Social | Invites, chat (later) | Shared memory + participation (leave preserves history for others) |
+| Social | Invites, coordination (M14+); chat M15 | Shared memory + participation (**leave preserves history** for others) |
 | End state | Transform or purge | Leave memory; orphan purge when no active participants remain |
 
 ---
@@ -330,16 +335,35 @@ transform_at = ends_at + grace_period
 
 **If dates change:** recompute `transform_at` on edit while the plan is still upcoming.
 
-### Cancel vs remove
+### Experience lifecycle (M14 — locked)
 
-| Action | Meaning | When |
-|--------|---------|------|
-| **Cancel** | This real plan is **no longer happening** | Legitimate plan that won't occur; stays visible until `purge_at` |
-| **Remove** | User **does not want this in their Kairos** | M12 solo: hard-delete row (planned or cancelled before purge). M14: remove participation only; hard-delete experience when **no participants remain** |
+Experiences represent **who is currently planning to attend**. Memories represent **what was lived**. Participation semantics differ on purpose.
 
-Cancel is not “hide immediately.” Remove is not “plan cancelled.” A cancelled plan can still be **removed** early from the user's view.
+| Action | Who | Effect |
+|--------|-----|--------|
+| **Leave** | Any participant | `DELETE` their `experience_participant` row — **no tombstone**, no `left_at` |
+| **Remove** | Leader only | Same as leave — hard-delete participant row (moderation; toxic participant) |
+| **Cancel** | Leader only (planned) | `status = cancelled`, set `cancelled_at` + `purge_at`; plan stays visible to participants until purge window |
+| **Delete** | Leader only (planned) | Hard-delete experience for **everyone** (destructive; distinct UX copy from cancel) |
+| **Revive** | Any active participant | `cancelled` → `planned` if **`starts_at > now()`**; reviver becomes `organizer_id` |
 
-**M14 participant model (not blocking M12):** `experience_participants` will drive visibility. One participant removing themselves must not destroy the plan for others. The experience row is hard-deleted only when the last participant leaves. M12's `delete_experience` RPC is the solo-organizer version of that rule.
+**Cancelled plans (permission model):** `organizer_id` stays in the DB for history, but there is **no active leader** until someone revives. While cancelled, participants only see **Revive** (when eligible) and **Leave** — no delete, transfer, remove, invite, or edit leader actions.
+
+**Revive rule (locked):** If `starts_at` has already passed, **do not show Revive** and do not offer a date picker during revive. The moment’s scheduling window is gone — keep the flow simple.
+
+**Last participant gone:** `DELETE` experience row (same as solo M12 when the only person leaves).
+
+**Cancel vs delete UX:** Both are leader-only while the plan is **planned**. Copy must make clear that **cancel** keeps the plan visible and revivable (when dates allow); **delete** permanently removes it for all participants. Once cancelled, delete is not offered — participants wait out the purge window or leave individually.
+
+**M12 “Remove” (solo):** Maps to **Leave** when the user is a participant. When solo organizer removes the plan entirely, that is **Delete** (or leave as last participant → experience purged).
+
+**Invitations:** Only **accepted** invitees become `experience_participants`. Pending/declined invitations never appear in the participant list.
+
+**Account delete (experiences):** Remove participation completely — **no tombstone** on `experience_participants`. Cancel pending invites involving the deleted user. Transfer `organizer_id` before purge when they were leader.
+
+**Account delete (memories):** Unchanged from M13 — tombstone (`user_id → NULL`), preserve shared moment for others.
+
+**Leader remove participant:** Leader may remove a participant before transform (same hard-delete as voluntary leave). Does **not** apply to memories — removing someone from a lived memory is out of scope for M14.
 
 ### Location (M12 foundation)
 
@@ -399,13 +423,15 @@ Two roles on experiences:
 | Field | Purpose | Mutable? | Visible to users? |
 |-------|---------|----------|-------------------|
 | **`created_by`** | Who originally created the row | **Never** | **No** — technical/audit metadata only |
-| **`organizer_id`** | Who can edit, cancel, invite, transfer leadership | **Yes** (M14+) | **Yes** — “who is running this plan” |
+| **`organizer_id`** | Who can edit (per policy), cancel, delete, invite, approve suggestions, remove participants, transfer leadership | **Yes** (M14+) | **Yes** — UI label **Leader** |
 
-On create (M12): `organizer_id := created_by`.
+On create (M12/M14): `organizer_id := created_by`. Creator is always the first accepted participant row.
 
 **Memories:** do not treat `created_by` or `leader_id` as displayed ownership. The shared memory represents the group moment. **`leader_id`** is operational admin (WhatsApp-style), not owner. Personal data lives only in **`personal_note`** (private) and participation rows.
 
 RLS and RPCs should check **`organizer_id`** on experiences and **`leader_id` + policies** on memories for management actions — not `created_by`.
+
+**Edit policies (M14 experiences, M13 memories):** Each entity stores `edit_info_policy`: `all_participants` \| `leader_only`. Applies to shared **content** (title, description, location) — not lifecycle actions (cancel, delete, invite, remove participant, leadership transfer).
 
 ---
 
@@ -445,7 +471,7 @@ There is **one shared** title, description, location, and date. Everyone remembe
 
 | Tab | Role |
 |-----|------|
-| **Home** | What is **going to happen** — upcoming and cancelled-until-purge **experiences** only |
+| **Home** | What is **going to happen** — planned experiences (until transform) and cancelled-until-purge |
 | **Profile** | Who I am and what I have **lived** — friends, stats, **memories** |
 
 Profile shows memory count (e.g. “7 memories”) and a full **Memories** area: list, search/filter (M13: title search; date filters later), tap through to detail. Memories are core identity — give them real space, not a tiny preview only.
@@ -463,10 +489,12 @@ memories
 
 memory_participants
   — memory_id, user_id (nullable after account delete)
-  — role (organizer | participant)
   — personal_note (private; max 1000 chars)
   — joined_at, left_at (NULL = active participation)
+  — notifications_muted boolean DEFAULT false
   — memory_id → memories(id) ON DELETE CASCADE (leave uses left_at; memory delete removes row)
+
+**Leadership (SSOT):** `experiences.organizer_id` and `memories.leader_id` are the only operational leadership columns. Participant list RPCs expose derived flags (`is_organizer`, `is_leader`) — no stored participant `role` (removed in migration `261607`).
 
 memory_media
   — shared gallery; uploaded_by_user_id (nullable → “Deleted user”)
@@ -576,12 +604,13 @@ Validate in **UI and database** (CHECK + RPC). Align shared fields with experien
 
 Kairos has two distinct deletion modes. Do not conflate them.
 
-| Mode | Meaning | Example |
-|------|---------|---------|
-| **User leaves** | User opts out; shared entity may survive for others | `leave_memory` → `left_at` |
-| **User account deleted** | Personal identity erased; tombstone where history needs a slot | `auth.admin.deleteUser` |
-| **Parent entity deleted** | Dependent rows removed automatically | `DELETE memories` → CASCADE children |
-| **Orphan purge** | No active participants remain | RPC/cron deletes memory row |
+| Mode | Meaning | Experience (M14) | Memory (M13) |
+|------|---------|------------------|--------------|
+| **User leaves** | User opts out; entity may survive for others | `DELETE` participant row | `leave_memory` → `left_at` |
+| **Leader removes** | Moderation before the moment | `DELETE` participant row | Out of scope M14 |
+| **User account deleted** | Personal identity erased | `DELETE` participation | Tombstone participant |
+| **Parent entity deleted** | Dependent rows CASCADE | `DELETE experiences` | `DELETE memories` → CASCADE |
+| **Orphan purge** | No active participants remain | DELETE experience row | DELETE memory row |
 
 **Active participant** (memories): `user_id IS NOT NULL AND left_at IS NULL`. Tombstones and voluntary leave rows do **not** keep a memory alive.
 
@@ -594,10 +623,14 @@ DELETE auth.users
   → CASCADE DELETE public.profiles
   → BEFORE DELETE: handle_profile_delete_memories()
        • transfer leader_id where deleted user was leader
-       • tombstone their memory_participants (user_id → NULL, clear personal_note)
+       • tombstone memory_participants (user_id → NULL, clear personal_note)
        • purge memories with no remaining active participants
+  → BEFORE DELETE: handle_profile_delete_experiences() (M14)
+       • transfer organizer_id where deleted user was leader
+       • DELETE experience_participant rows (no tombstone)
+       • cancel pending invites; purge experience if no participants remain
   → CASCADE DELETE public.friendships (any row referencing profile)
-  → CASCADE DELETE public.experiences (created_by / organizer_id — M12/M13 solo)
+  → SET NULL on experiences.created_by / organizer_id (M14 — no CASCADE on shared plan row)
   → SET NULL on memories audit columns (created_by, leader_id, …)
   → SET NULL on memory_media.uploaded_by_user_id
   → AFTER DELETE: pg_net → cleanup-user-storage (avatars)
@@ -607,8 +640,8 @@ DELETE auth.users
 |---------------------------|----------------------|
 | Profile, username, avatar, auth session | Shared memory when other **active** participants remain |
 | All friendship rows involving user | Shared photos (uploader → “Deleted user”) |
-| User’s upcoming/cancelled experiences (M12 solo) | Other users’ personal notes |
-| Solo memories (no active participants left) | Participant history rows (`left_at`, tombstones) until memory purged |
+| User’s participation on upcoming experiences | Other participants’ plans (experience row stays) |
+| Solo memories (no active participants after tombstone) | Shared photos with “Deleted user” attribution |
 
 **Deleted participant display:** UI label **“Deleted user”** — no profile link, username, or avatar. Do not snapshot display names that re-identify the person.
 
@@ -630,14 +663,25 @@ Audit every relationship. **Do not blindly CASCADE profile references on shared 
 | `user_high_id` | `profiles(id)` | **CASCADE** | Same |
 | `initiated_by` | `profiles(id)` | **CASCADE** | Same |
 
-#### `experiences` (M12/M13 — solo organizer)
+#### `experiences` (M12 solo → M14 shared)
 
 | FK | References | ON DELETE | Verdict |
 |----|------------|-----------|---------|
-| `created_by` | `profiles(id)` | **CASCADE** | ⚠️ **M14 must change to SET NULL** when shared experiences exist |
-| `organizer_id` | `profiles(id)` | **CASCADE** | ⚠️ **M14 must change** — transfer organizer or remove participation, not delete shared plan for everyone |
+| `created_by` | `profiles(id)` | **CASCADE** → **M14: SET NULL** | Audit tombstone only |
+| `organizer_id` | `profiles(id)` | **CASCADE** → **M14: SET NULL** | Transfer via RPC before leave/delete; never CASCADE-delete shared plan |
 
-No child tables yet. `inspired_by_opportunity_id` has no FK (M18). Entity delete = `DELETE experiences` row (transform, purge crons, or user remove RPC).
+**M14 child tables:** `experience_participants`, `experience_invitations`, `experience_invite_suggestions`, `experience_invite_declines` — CASCADE from `experiences(id)`.
+
+Entity delete = `DELETE experiences` row (leader delete, last participant leave, transform, or purge cron).
+
+#### `experience_participants` (M14)
+
+| FK | References | ON DELETE | Verdict |
+|----|------------|-----------|---------|
+| `experience_id` | `experiences(id)` | **CASCADE** | Experience deleted → row gone |
+| `user_id` | `profiles(id)` | **CASCADE** → **M14: SET NULL not used** | Account delete → **DELETE row** (no tombstone). Voluntary leave / leader remove → **DELETE row**. |
+
+No `left_at` on experience participants — roster is current-only.
 
 #### `memories`
 
@@ -671,7 +715,7 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 |----------------|------------------------|--------------------|
 | `memories` | `memory_participants`, `memory_media` (DB) + `memories/{memory_id}/` Storage (pg_net → `cleanup-memory-storage`) | — |
 | `memories` (manual admin delete) | Same — CASCADE + Storage cleanup trigger | — |
-| `experiences` | *(none yet)* | — |
+| `experiences` | `experience_participants`, invitations, suggestions (M14) | Memory rows (separate lifecycle) |
 | `profiles` | `friendships`, `experiences` (M12) | Memory rows (tombstone + purge rules) |
 
 **Leave memory (not delete):** `leave_memory` RPC sets `left_at`; participant row **kept** for shared history. Leader must transfer when required. `purge_memory_if_orphaned` runs when no active participants remain.
@@ -682,7 +726,7 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 
 **Memory RLS (SELECT):** Policies on `memories`, `memory_participants`, and `memory_media` must **not** subquery `memory_participants` directly — that causes **42P17 infinite recursion** when INVOKER code reads those tables. Use `is_active_memory_participant(memory_id)` (SECURITY DEFINER helper) in all three SELECT policies.
 
-**Transform before list (client):** Profile and memories search call `transform_my_due_experiences()` as an explicit **write RPC** before listing — not embedded in read RPCs. Also: ended experience detail (`ensure_experience_transformed`), global cron every 15 min.
+**Transform before list (client):** Profile, memories search, and **Home** call `transform_my_due_experiences()` as an explicit **write RPC** before listing — not embedded in read RPCs. Home also calls `purge_my_stale_experiences()` before listing plans. **Home list visibility** uses row existence (`status = planned`), not `transform_at > now()` — a due plan stays visible until transform DELETEs it (optional UI: “Becoming a memory…”). Also: ended experience detail (`ensure_experience_transformed`), global cron every 15 min (transform + stale experience purge).
 
 **RPC implementation note:** Do not use plpgsql `RETURNS TABLE (id, …)` with `RETURN QUERY SELECT m.id, …` — PostgreSQL error **42702**. Use **LANGUAGE sql** (like experiences).
 
@@ -710,21 +754,28 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 
 | Job | Purpose |
 |-----|---------|
-| `purge_stale_experiences()` | Cancelled plans past `purge_at` |
+| `purge_stale_experiences()` | Cancelled plans past `purge_at` (daily cron + 15 min transform cron) |
+| `purge_my_stale_experiences()` | Explicit write RPC (Home screen) before list — participant-scoped stale cancel purge |
 | `transform_due_experiences()` | Planned → memory at `transform_at` |
 | `purge_orphaned_memories()` | Memories with zero active participants |
 | `purge_orphaned_memory_rows()` | Child rows whose memory row was removed outside CASCADE (cron only) |
 | `maintain_orphaned_memories()` | Daily cron: child-row purge + memory orphan purge |
-| `transform_my_due_experiences()` | Explicit write RPC (Profile/memories screen) + not inside reads |
+| `transform_my_due_experiences()` | Explicit write RPC (Home, Profile, memories screen) before list — not inside reads |
 | `expire_stale_friend_requests()` | Pending requests > 60 days |
 | `handle_profile_delete_memories()` | Leader transfer + tombstone + **immediate** orphan memory purge (+ Storage cleanup via memory DELETE trigger) |
 
-### M14+ migration requirements (do not ship without)
+### M14 migration requirements (locked)
 
-1. **`experience_participants`** table — leave/tombstone pattern like memories; do not CASCADE-delete shared experiences when one user deletes account.
-2. **`experiences.created_by`** → change to **SET NULL** (audit tombstone).
-3. **`experiences.organizer_id`** → transfer or participation RPC, not CASCADE for shared plans.
-4. ~~**Memory storage cleanup** on `DELETE memories`~~ — **done in M13** (`cleanup-memory-storage` + pg_net trigger). M14 must not reintroduce client-only purge paths.
+1. **`experience_participants`** — accepted participants only; **hard DELETE on leave / leader remove / account delete** (no tombstone, no `left_at`).
+2. **`experience_invitations`** + **`experience_invite_suggestions`** + **`experience_invite_declines`** (per-experience decline limit).
+3. **`experiences.edit_info_policy`** — reuse `memory_permission_policy` enum.
+4. **`experiences.created_by` / `organizer_id`** → **SET NULL** on profile delete; transfer `organizer_id` via RPC/trigger before leave.
+5. **`handle_profile_delete_experiences`** — remove participation, transfer leader, purge pending invites; do not CASCADE-delete shared experience rows.
+6. **`notifications`** table + insert from RPCs (see Milestone 14 — Notifications foundation).
+7. **`notifications_muted`** on `experience_participants` and `memory_participants` (per-entity mute).
+8. Extend **`transform_experience_to_memory`** — all accepted participants → memory; copy `edit_info_policy`.
+9. Participant-based Home/list RLS and **`transform_my_due_experiences`** (not organizer-only).
+10. ~~**Memory storage cleanup**~~ — **done in M13.5**; do not reintroduce client-only purge paths.
 
 ---
 
@@ -738,8 +789,8 @@ When a user deletes their Kairos account:
 |---------|-----------|
 | Profile, username, avatar | The shared memory others still share |
 | Auth session, friendships | Other participants’ personal layers |
-| Their upcoming experiences (M12 solo) | Memory record of the moment (for others) |
-| Solo memories (no active participants after tombstone) | Shared photos with “Deleted user” attribution |
+| Their participation on shared upcoming experiences (row deleted) | Shared memory when other **active** participants remain |
+| Pending invites they sent/received (deleted/cancelled) | Shared photos (uploader → “Deleted user”) |
 
 **Implementation (M13):**
 
@@ -778,11 +829,262 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Milestone 13.5 — Cleanup** — photo delete UI, server-side single-file storage cleanup, M13 migration squash, docs sync. Awaiting final smoke test before commit.
+**Milestone 19 — Notifications UX** (retention + inbox) and UX polish — builds on M14 notification rows and shared experiences.
 
-**Milestone 14 — Shared experiences** — next product milestone.
+---
 
-### M13 migrations (squashed — 4 files)
+# Milestone 14 — locked architecture (approved)
+
+Do not implement outside this model without updating this section first.
+
+## Goal
+
+Turn solo private plans into **shared experiences**: friend invites, participant suggest flow, group transform to one memory, leadership transfer, and a **notification data foundation** (inbox/push in M19).
+
+## Planning roster vs historical record
+
+| | Experience (M14) | Memory (M13) |
+|--|------------------|--------------|
+| Meaning | Who plans to attend | What was lived |
+| Leave | `DELETE` participant row | `SET left_at` |
+| Leader remove | `DELETE` participant row | **Out of scope M14** |
+| Account delete | `DELETE` participation | Tombstone `user_id → NULL` |
+| Pending social state | `experience_invitations` | N/A |
+
+This is intentional — do not unify into one participation pattern.
+
+## Data model (conceptual)
+
+```text
+experiences
+  + edit_info_policy  (all_participants | leader_only)
+  organizer_id, status, starts_at, ends_at, …  (existing)
+
+experience_participants
+  experience_id, user_id
+  joined_at
+  notifications_muted  boolean DEFAULT false
+  UNIQUE (experience_id, user_id)
+  — accepted participants only; no pending rows
+  — leadership derived from experiences.organizer_id (is_organizer in list RPC)
+
+experience_invitations
+  experience_id, invitee_id, invited_by, status (pending | accepted | declined)
+  suggestion_id NULL  — set when created from approved suggestion
+  created_at, responded_at
+
+experience_invite_suggestions
+  experience_id, suggested_by, suggested_user_id
+  status (pending | approved | rejected)
+  reviewed_by, reviewed_at
+
+experience_invite_declines
+  experience_id, invitee_id, decline_count, blocked_at
+  — after 3 declines for same pair on same experience, block new invites
+
+notifications  (M14 foundation)
+  id, recipient_id, type, entity_type, entity_id
+  actor_id NULL, payload jsonb, read_at NULL, created_at
+```
+
+**Rejected complexity:** Separate “declined invitations history” table beyond `decline_count` on blocks — one counter row per `(experience, invitee)` is enough.
+
+## Invitations (locked)
+
+| Rule | Detail |
+|------|--------|
+| When | On create **and** after create, only while `now() < starts_at` |
+| Direct invite (private) | Invitee must be **leader’s friend** (accepted) |
+| On create | Creator may batch-invite friends only |
+| Accept | Creates `experience_participant` row |
+| Decline | No participant row; increment per-experience decline count |
+| After 3 declines | Block further invites to that user **for that experience only** |
+| Cancelled experience | Expire/reject pending invites; no new invites until **revived** |
+| Status | Only `planned` experiences accept invites |
+
+Philosophy mirrors **friend requests**: pending state is temporary; declining does not create a permanent social block (except the per-experience 3-strike rule).
+
+## Suggest invite flow (M14.0 — not deferred)
+
+| Step | Rule |
+|------|------|
+| Who suggests | Any **accepted participant**, after creation, before `starts_at` |
+| Suggested user | Must be **suggester’s friend** (accepted) — enables inviting non-leader friends after leader approval |
+| Leader | Approves or rejects suggestion |
+| If approved | System creates normal `experience_invitation`; invitee must still **accept** |
+| Direct invite | Leader only; leader’s friends only (private) |
+
+**Rejected complexity:** Participant sending invite without leader approval — always goes through suggestion when inviter is not leader or target is not leader’s friend.
+
+## Edit permissions
+
+Same enum as memories: `edit_info_policy` on `experiences`.
+
+- **`all_participants`:** any accepted participant may edit title, description, location (via RPC + optional `expected_updated_at`).
+- **`leader_only`:** only `organizer_id`.
+- **Not governed by policy:** cancel, delete, revive, invite, suggest, remove participant, leadership transfer.
+
+Default for new private plans: `all_participants` (match memory default).
+
+## Leadership (experiences + memories)
+
+UI label **Leader**; DB field `organizer_id` (experiences) / `leader_id` (memories).
+
+| Case | Rule |
+|------|------|
+| Manual transfer | Leader picks successor (`transfer_experience_leadership` / existing memory RPC) |
+| Voluntary leader leave | Must choose successor before leaving |
+| Account delete / forced removal | Oldest active participant by `joined_at` |
+| Revive | **Reviver becomes `organizer_id`** |
+
+Invariant: leader must always be an active accepted participant.
+
+## Cancel / delete / revive
+
+See **Experience lifecycle (M14 — locked)** above.
+
+On **cancel:** set `purge_at` from `ends_at + 24h`; clear pending invites.
+
+On **revive:** require `starts_at > now()`; set `status = planned`; clear cancel fields; assign `organizer_id := reviver`.
+
+On **delete:** hard-delete experience and all child rows for all participants.
+
+## Transform to memory (M14 changes)
+
+Extend existing transform RPC:
+
+1. Require `status = planned` and `transform_at <= now()`.
+2. Insert one `memory_participants` row per **accepted** experience participant; set `leader_id := organizer_id` at transform; copy `edit_info_policy`.
+3. Set `leader_id := organizer_id at transform`; copy `edit_info_policy`.
+4. `DELETE` experience (CASCADE invitations + participants).
+
+Cron `transform_due_experiences` unchanged in spirit — scans all due planned experiences.
+
+Client: `transform_my_due_experiences` and `ensure_experience_transformed` must include experiences where user is **any active participant**, not only organizer.
+
+## Notifications foundation (M14)
+
+**M14 ships:** `notifications` table + RPC inserts + `list_notifications` / `mark_notification_read` (minimal).
+
+**M19 ships:** notification center UI, badges, push, email, preference matrix.
+
+### Event catalog (recommended)
+
+Insert a notification row when the event occurs **unless** the recipient has muted that experience/memory (see below). Skip notifying the actor about their own action.
+
+#### Friendships (keep minimal — Profile already surfaces requests)
+
+| Type | Recipients | M14? |
+|------|------------|------|
+| `friend_request_received` | Target user | Yes |
+| `friend_request_accepted` | Original requester (if not auto-accept edge) | Yes |
+| `friend_request_declined` | — | **No** — silent like today |
+| `friend_removed` | — | **No** — optional M19 |
+
+#### Experiences — invitations
+
+| Type | Recipients | M14? |
+|------|------------|------|
+| `experience_invitation_received` | Invitee | Yes |
+| `experience_invitation_accepted` | Leader + inviter (if different) | Yes |
+| `experience_invitation_declined` | Leader (+ inviter if different) | Yes — low volume |
+| `experience_invite_blocked` | Inviter | **No** — RPC returns clear error |
+
+#### Experiences — suggestions
+
+| Type | Recipients | M14? |
+|------|------------|------|
+| `experience_invite_suggestion_received` | Leader | Yes |
+| `experience_invite_suggestion_approved` | Suggester | Yes |
+| `experience_invite_suggestion_rejected` | Suggester | Yes |
+
+#### Experiences — participation & lifecycle
+
+| Type | Recipients | M14? |
+|------|------------|------|
+| `experience_participant_joined` | Leader + other participants (not joiner) | Yes |
+| `experience_participant_left` | Leader + remaining (not leaver) | Yes |
+| `experience_participant_removed` | Removed user | Yes |
+| `experience_updated` | Non-muted participants except editor | Yes — **one type per edit RPC**, not per field |
+| `experience_cancelled` | Non-muted participants except leader | Yes |
+| `experience_revived` | Non-muted participants except reviver | Yes |
+| `experience_deleted` | All participants before delete | Optional — row gone; brief in-app toast may suffice |
+
+#### Memories
+
+| Type | Recipients | M14? |
+|------|------------|------|
+| `memory_created` | All participants (experience transformed) | Yes — “Your plan is now a memory” |
+| `memory_info_updated` | Non-muted participants except editor | Yes — if policy allows edit |
+| `memory_photo_added` | — | **No M14** — too noisy; reconsider M19 with digest |
+| `memory_photo_deleted` | — | **No** — unless moderation report later |
+
+**Rejected complexity for M14:**
+
+- Global notification preferences per type — use **per-experience / per-memory mute** only.
+- Push / email delivery — M19.
+- Notifying every photo upload in a memory.
+- Separate notification threads or grouping UI — M19.
+
+### Per-entity muting (locked)
+
+WhatsApp-style: small groups want alerts; large public plans (M16+) may not.
+
+```text
+experience_participants.notifications_muted  DEFAULT false
+memory_participants.notifications_muted        DEFAULT false
+```
+
+RPC `set_participant_notifications_muted(entity, muted)` — user mutes **their own** participation row only.
+
+When enqueueing notifications for an experience/memory event, skip recipients where `notifications_muted = true` on that entity.
+
+**Friend notifications:** not mutable via entity mute (no participation row) — volume is low.
+
+**Default:** unmuted. UI copy: “Mute notifications for this plan/memory.”
+
+## Account deletion (M14)
+
+| Domain | Behavior |
+|--------|----------|
+| Experiences | DELETE `experience_participant` rows; cancel pending invites; transfer leader; purge experience if no participants remain |
+| Memories | M13 tombstone + leader transfer + orphan purge |
+
+Add **`handle_profile_delete_experiences`** (mirror memory handler pattern).
+
+## RPC inventory (M14 — implemented)
+
+**Reads (INVOKER where RLS suffices):** `list_my_home_experiences`, `get_experience`, `list_experience_participants`, `list_experience_invitations`, `list_incoming_experience_invitations`, `list_experience_invite_suggestions`, `list_notifications`, `count_unread_notifications`.
+
+**Reads (DEFINER — memory pattern unchanged):** `list_my_memories`, `get_memory`, `list_memory_participants` (returns `is_leader`), `list_memory_media`.
+
+**Writes (SECURITY DEFINER):** `create_experience`, `update_experience`, `cancel_experience`, `delete_experience`, `revive_experience`, `leave_experience`, `remove_experience_participant`, `transfer_experience_leadership`, `send_experience_invitation`, `accept_experience_invitation`, `decline_experience_invitation`, `suggest_experience_invite`, `review_experience_invite_suggestion`, `set_experience_notifications_muted`, `set_memory_notifications_muted`, `mark_notification_read`, `purge_my_stale_experiences`, plus existing memory write RPCs.
+
+**Internal / cron (not client-granted):** `transform_experience_to_memory`, `transform_due_experiences`, `transform_my_due_experiences`, `purge_stale_experiences`, profile-delete triggers, notification enqueue helpers.
+
+## Explicitly out of M14
+
+- Public experience discovery / open join (M16–M17)
+- Experience chat (M15)
+- Removing participants from **memories**
+- Rejoin after leave (experiences or memories)
+- Global user block list
+- Push notifications and full inbox UX (M19)
+- Permission settings UI beyond defaults + leader changing `edit_info_policy` (can be minimal)
+
+## Implementation order (recommended)
+
+1. Schema: participants, invitations, suggestions, blocks, `edit_info_policy`, FK fixes, profile-delete handler
+2. Core RPCs: invite accept/decline, leave, leader remove, transfer, participant list, Home RLS
+3. Cancel / delete / revive + multi-participant transform
+4. Suggest-invite flow
+5. Notifications table + enqueue in RPCs + mute flag
+6. Client: create-with-invites, detail participants, invite inbox, leader actions, muted toggle
+7. Manual validation checklist (M14)
+
+---
+
+### M13 / M13.5 reference (complete)
 
 See `supabase/MIGRATIONS.md`. Fresh install runs four intentional migrations after M12:
 
@@ -816,7 +1118,7 @@ Run after `npx supabase db push` on linked Supabase.
 
 **Transform lifecycle**
 
-- [ ] Plan past `transform_at` drops off Home
+- [ ] Plan past `transform_at` stays on Home with “Becoming a memory…” until transform DELETEs the row; memory then appears on Profile
 - [ ] Profile/memories screen calls `transform_my_due_experiences` then lists (read RPC stays pure)
 - [ ] Opening ended plan detail lazy-transforms and redirects to memory detail
 - [ ] Cron `transform_due_experiences` creates memories for due plans (optional: simulate via SQL)
@@ -882,7 +1184,7 @@ Build in order; validate manually before commit (same rhythm as M12).
 
 ### Phase 1 — Database
 
-1. Enums: `memory_participant_role`, `memory_edit_policy`, `memory_media_policy`
+1. Enums: `memory_permission_policy` (`memory_edit_policy` / `memory_media_policy` naming in docs); ~~`memory_participant_role`~~ dropped in M14 cleanup (`261607`)
 2. Tables: `memories`, `memory_participants`, `memory_media`
 3. CHECK constraints for character limits (title 120, description 2000, location 200, personal_note 1000)
 4. RLS: SELECT for active participants; writes via SECURITY DEFINER RPCs only
@@ -946,6 +1248,19 @@ Stored columns and why they exist — do not remove without updating this sectio
 
 ---
 
+## Memories schema notes (M13/M14 audit)
+
+| Column | Recommendation | Rationale |
+|--------|----------------|-----------|
+| `leader_id` | **Keep** | Current permission anchor for memory admin actions; transfer via RPC before leave/delete. |
+| `organizer_id_at_transform` | **Keep** | Immutable audit snapshot of `experiences.organizer_id` at transform — distinct from `created_by` and from current `leader_id` after transfers. Never shown in UI. |
+| `created_by` | **Keep** | Immutable audit of who created the source experience row. |
+| `updated_by` / `updated_at` | **Keep** | Shared edit audit + optimistic concurrency on `update_memory_info`. |
+| `source_experience_id` | **Keep** | Lineage UUID after experience row is deleted on transform; not joinable but useful for support/analytics. |
+| ~~`memory_participants.role`~~ | **Removed (`261607`)** | Duplicated leadership state; derive via `leader_id` + `is_leader` in list RPC. |
+
+---
+
 # Milestone 12 — validation checklist (complete)
 
 Applied migrations: `20260624100000_experiences_foundation.sql`, `20260624110000_experience_m12_adjustments.sql`.
@@ -970,12 +1285,12 @@ Applied migrations: `20260624100000_experiences_foundation.sql`, `20260624110000
 **Remove**
 
 - [x] Remove upcoming plan → confirm copy says it leaves your Kairos (not “created by mistake”)
-- [x] Remove cancelled plan → disappears immediately from Home and detail
-- [x] Cancelled plan cannot be edited; remove is still available before purge
+- [x] Cancelled plan cannot be edited; no leader-only actions (delete, transfer, remove, invite)
+- [x] Cancelled participants may leave without transferring leadership; reviver becomes leader on revive
 
 **Transform boundary (M13)**
 
-- [x] Plan past `transform_at` drops off Home; detail lazy-transforms to memory
+- [x] Plan past `transform_at` stays on Home until transform completes; detail/list show “Becoming a memory…” during the window
 - [x] No manual **Complete** button anywhere
 
 **Regression**
@@ -1023,15 +1338,18 @@ Run after applying migration `20260623100000_friend_relationships.sql` to linked
 
 # Supabase security architecture
 
-Kairos prefers **controlled RPCs** with business rules in SQL over broad table write grants. Supabase Security Advisor warnings should be triaged as follows:
+Kairos prefers **controlled RPCs** with business rules in SQL over broad table write grants. Supabase Security Advisor warnings should be triaged as follows — **full M14 inventory:** `docs/SECURITY.md`.
 
 | Advisor item | Verdict | Notes |
 |--------------|---------|-------|
-| **SECURITY DEFINER** friendship RPCs | Expected — keep | `send_friend_request`, `accept_friend_request`, etc. enforce canonical pair ordering, expiry, and simultaneous-accept rules. All use `SET search_path = public`. Reads use INVOKER RPCs + RLS SELECT. |
-| **SECURITY DEFINER** experience RPCs | Expected — keep | `create_experience`, `update_experience`, `cancel_experience`, `delete_experience` enforce dates, visibility, and solo-organizer rules. Table writes are not granted to `authenticated`. |
-| **SECURITY DEFINER** triggers / cron | Expected — keep | `handle_new_user`, storage cleanup, purge/transform jobs. Revoke EXECUTE from PUBLIC where applicable (see `20260618010000_security_hardening.sql`). |
-| **`rls_auto_enable()`** | Supabase-internal noise | Not owned by this project; documented in `20260618010000_security_hardening.sql`. No action. |
-| **Leaked password protection** | Not applicable | Kairos uses **Email OTP only** — no password auth. Enable in Supabase dashboard if passwords are added later. |
+| **SECURITY DEFINER** friendship RPCs | Expected — keep | Pair ordering, expiry, simultaneous-accept rules. Reads use INVOKER + RLS. |
+| **SECURITY DEFINER** experience / memory write RPCs | Expected — keep | Dates, leadership columns, edit policies, lifecycle rules. No direct table writes for `authenticated`. |
+| **SECURITY DEFINER** memory + notification read RPCs | Expected — keep | Explicit permission boundary; see SECURITY.md. |
+| **SECURITY DEFINER** triggers / cron | Expected — keep | Profile delete, storage cleanup, purge/transform jobs. |
+| **`experiences_select_organizer` overlap** | Keep until measured | Redundant with participant policy but harmless; do not drop without EXPLAIN. |
+| **`rls_auto_enable()`** | Supabase-internal noise | Not owned by this project. No action. |
+| **Leaked password protection** | Not applicable | Email OTP only — no password auth. |
+| **`db lint` SQL errors** | Fix when found | e.g. `FOR UPDATE` + `DISTINCT` fixed in `261605`, `261608`. Run `npx supabase db lint --linked` after pushes. |
 
 Do not weaken RLS or remove DEFINER RPCs just to silence the linter.
 
@@ -1047,7 +1365,8 @@ When helping with Kairos:
 - Do not build feeds, recommendations, suggested users, or Discover content during early core milestones.
 - Friendships are **mutual** (Discord-style), not follows — no follower counts or asymmetric graph.
 - Do not conflate global user search (Search tab) with the experience participant picker (friends only, later).
-- **Remove** (not “delete as mistake”) removes a plan from the user’s Kairos; shared participant rules arrive in M14.
+- **Remove** (not “delete as mistake”) removes a plan from the user’s Kairos; shared participant rules are in M14 (complete).
+- Leadership SSOT: `organizer_id` / `leader_id` only — no participant `role` column.
 - Experiences require **starts_at and ends_at**; undated items are future Ideas, not experiences.
 - Memories live on **Profile**, not Home — Home is future plans only.
 - One **shared** memory per moment — no personal titles; **personal_note** is private only.

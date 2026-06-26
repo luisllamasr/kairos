@@ -43,12 +43,12 @@ function mapParticipant(row: Record<string, unknown>): MemoryParticipant {
   return {
     participant_id: row.participant_id as string,
     user_id: (row.user_id as string | null) ?? null,
-    role: row.role as MemoryParticipant['role'],
     joined_at: row.joined_at as string,
     left_at: (row.left_at as string | null) ?? null,
     username: (row.username as string | null) ?? null,
     display_name: (row.display_name as string | null) ?? null,
     avatar_url: (row.avatar_url as string | null) ?? null,
+    is_leader: Boolean(row.is_leader),
   };
 }
 
@@ -154,6 +154,18 @@ export async function leaveMemory(
   const { error } = await supabase.rpc('leave_memory', {
     p_id: memoryId,
     p_new_leader_id: newLeaderId ?? null,
+  });
+  if (error) return { ok: false, error: true };
+  return { ok: true, error: false };
+}
+
+export async function transferMemoryLeadership(
+  memoryId: string,
+  newLeaderId: string,
+): Promise<RpcResult> {
+  const { error } = await supabase.rpc('transfer_memory_leadership', {
+    p_memory_id: memoryId,
+    p_new_leader_id: newLeaderId,
   });
   if (error) return { ok: false, error: true };
   return { ok: true, error: false };
