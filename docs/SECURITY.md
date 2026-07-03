@@ -1,18 +1,43 @@
 # Kairos — Security model
 
-Supabase Security Advisor warnings are expected for intentional **SECURITY DEFINER** RPCs. This document records what is deliberate, what was tightened, and what is not applicable.
+This document records Kairos’ database security architecture, what is deliberate, what was tightened, and how we evaluate Supabase Security Advisor warnings.
+
+**Goal:** best architecture first — not zero warnings at any cost — but we actively investigate whether warnings can be eliminated without weakening the model.
+
+**Status:** Pre-M15 security review **complete** (migrations through `261620`). Remaining Advisor items are documented intentional outcomes below.
 
 ---
 
 ## Authentication
 
-Kairos uses **passwordless auth only** (Email OTP / magic link via Supabase Auth). There are no user passwords in the product.
+Kairos uses **passwordless auth only** (Email OTP via Supabase Auth). There are no user passwords in the product.
+
+**Verified in codebase (pre-M15):**
+
+| Flow | Implementation |
+|------|----------------|
+| Sign-in | `supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })` — `src/app/(auth)/sign-in.tsx` |
+| Verify | `supabase.auth.verifyOtp({ email, token, type: 'email' })` — `src/app/(auth)/verify.tsx` |
+| Session / account switch | `setSession`, `signOut`, `getSession` — no password APIs |
+
+There is **no** `signInWithPassword`, `signUp` with password, `resetPasswordForEmail`, or password UI anywhere in the app.
 
 | Advisor warning | Status |
 |-----------------|--------|
-| Leaked password protection disabled | **Not applicable** today — no password sign-up or sign-in flow exists. |
+| Leaked password protection disabled | **Not applicable** — no password sign-up or sign-in flow exists. Users authenticate with a one-time email code only. |
 
-**Future:** If email+password auth is added, enable [Leaked Password Protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) in the Supabase dashboard **before** releasing that flow.
+### Leaked password protection — Free plan limitation
+
+Supabase’s [Password security docs](https://supabase.com/docs/guides/auth/password-security) state: *“Leaked password protection is available on the Pro Plan and above.”* The [pricing page](https://supabase.com/pricing) lists it under Pro/Team/Enterprise only (`password_hibp` entitlement).
+
+| Question | Answer |
+|----------|--------|
+| Can we enable it on Free? | **No** — dashboard toggle is disabled (“Only available on Pro plan and above”). |
+| Is there a config or code workaround? | **No** — feature is plan-gated; Security Advisor will report it on Free regardless of auth model. |
+| Does it affect Kairos today? | **No** — nothing in our auth flow sets or checks user passwords. |
+| When to revisit | Upgrade to **Pro+** and enable before shipping **any** email+password auth; until then, treat as **accepted platform noise**. |
+
+**Future:** If email+password auth is added, upgrade to Pro (or above) and enable [Leaked Password Protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) **before** releasing that flow.
 
 ---
 
@@ -20,40 +45,53 @@ Kairos uses **passwordless auth only** (Email OTP / magic link via Supabase Auth
 
 | Layer | Mechanism |
 |-------|-----------|
-| Table writes | No direct `INSERT`/`UPDATE`/`DELETE` grants to `authenticated` on domain tables |
+| Table writes (domain) | No direct `INSERT`/`UPDATE`/`DELETE` grants to `authenticated` on domain tables |
 | Permissions | **SECURITY DEFINER RPCs** enforce business rules (`auth.uid()` checks, leadership columns) |
-| Table reads (most) | **SECURITY INVOKER** RPCs or RLS-protected direct `SELECT` |
-| Memory reads | **SECURITY DEFINER** RPCs (see below — intentional) |
-| Internal helpers | **SECURITY DEFINER**, `REVOKE ALL FROM PUBLIC`, **no** `GRANT EXECUTE TO authenticated` unless required for Storage RLS |
+| Table reads | **SECURITY INVOKER** RPCs + RLS on underlying tables |
+| Notifications (own rows) | `notifications` grants `SELECT`/`UPDATE` to `authenticated` with RLS; read/mark RPCs are **INVOKER** |
+| Membership helpers | **Split overloads** — one-arg public (caller-only), two-arg internal (write RPCs) |
+| Other internal helpers | **SECURITY DEFINER**, `REVOKE ALL FROM PUBLIC`, no client `EXECUTE` |
 | Triggers / crons | **SECURITY DEFINER**, not callable by clients |
 
 All project-owned DEFINER functions use `SET search_path = public`.
 
-**Leadership SSOT (M14 cleanup):** Permission checks use `experiences.organizer_id` and `memories.leader_id` only. Participant rows are membership-only; list RPCs return derived `is_organizer` / `is_leader`. The former `memory_participants.role` / `experience_participants.role` columns were removed in migration `261607`.
+**Leadership SSOT (M14):** Permission checks use `experiences.organizer_id` and `memories.leader_id` only. Participant rows are membership-only; list RPCs return derived `is_organizer` / `is_leader`.
 
 ---
 
-## Helper functions
+## Membership helper functions (`261610`)
+
+Three helpers gate RLS and Storage. They use **PostgreSQL overloads**:
+
+| Signature | Callable by `authenticated`? | Purpose |
+|-----------|------------------------------|---------|
+| `is_experience_participant(uuid)` | **Yes** | RLS — checks **caller only** (`auth.uid()`) |
+| `is_experience_participant(uuid, uuid)` | **No** | Internal — write RPCs test arbitrary users |
+| `is_pending_experience_invitee(uuid)` | **Yes** | RLS — caller’s pending invite only |
+| `is_pending_experience_invitee(uuid, uuid)` | **No** | Internal |
+| `is_active_memory_participant(uuid)` | **Yes** | RLS + Storage — caller’s active membership only |
+| `is_active_memory_participant(uuid, uuid)` | **No** | Internal — write RPCs pass explicit `v_me` |
+
+**Why split?** The two-arg forms were previously granted to `authenticated`, allowing membership probing via `/rest/v1/rpc`. RLS and Storage only need the one-arg form. Write RPCs call the two-arg form as function owner — no client grant required.
+
+**Why one-arg stays DEFINER:** These helpers are referenced **inside RLS policies on the same tables they query**. `SECURITY DEFINER` breaks RLS recursion. They remain callable by clients but are caller-only (safe).
+
+---
+
+## Other internal helpers
 
 | Function | Callable by `authenticated`? | Why |
 |----------|------------------------------|-----|
-| `is_active_memory_participant(uuid, uuid)` | **Yes** | Required for `storage.objects` RLS on the `memories` bucket — policy expressions invoke this function during upload/list/delete checks. Returns only whether **the current user** is an active participant. |
-| `is_experience_participant(uuid, uuid)` | **No** | Internal + RLS helper for experience SELECT policies. Not granted to clients directly. |
-| `is_pending_experience_invitee(uuid)` | **No** | Internal + RLS helper for pending-invitee read access. |
-| `memory_has_active_participants(uuid)` | **No** | Internal only (orphan purge, leave flow, crons). Revoked in `251400`. |
-| `experience_min_starts_at()` | **No** | Internal only — called from `create_experience` / `update_experience` write RPCs. Revoked in `251400`. |
-| `resolve_discoverable_profile_id(text)` | **No** | Internal only — friend write RPCs. Never granted to `authenticated`. |
-| `elect_memory_leader`, `purge_memory_if_orphaned` | **No** | Internal only. |
-| `transfer_memory_leadership` | **Yes** | Leader-only write RPC (⋮ menu on memory detail). |
-| `purge_orphaned_*`, `maintain_orphaned_memories`, `transform_due_experiences`, `purge_stale_experiences` | **No** | Cron / internal only. |
-| `trim_notification_inbox`, `maintain_notification_retention` | **No** | Inbox cap + read TTL; called from enqueue + daily cron. |
-| `transform_experience_to_memory`, `transform_my_due_experiences`, `purge_my_stale_experiences` | **`transform_my_due_experiences` + `purge_my_stale_experiences` yes**; transform single-row internal | Explicit client write RPCs before list/detail; batch transform cron internal. |
-| Trigger functions (`handle_*`, `trigger_storage_cleanup_*`) | **No** | Trigger-only. |
-| Notification enqueue helpers (`enqueue_notification`, `notify_experience_participants`, …) | **No** | Called from write RPCs only. |
+| `memory_has_active_participants(uuid)` | **No** | Internal only (orphan purge, leave flow, crons) |
+| `experience_min_starts_at()` | **No** | Internal only — called from write RPCs |
+| `resolve_discoverable_profile_id(text)` | **No** | Internal only — friend write RPCs |
+| `elect_memory_leader`, `purge_memory_if_orphaned`, … | **No** | Internal / cron only |
+| `enqueue_notification`, `notify_experience_participants`, … | **No** | Called from write RPCs only |
+| Trigger functions (`handle_*`, `trigger_storage_cleanup_*`) | **No** | Trigger-only |
 
 ---
 
-## Intentional client RPCs (`GRANT EXECUTE TO authenticated`)
+## Client RPC inventory (`GRANT EXECUTE TO authenticated`)
 
 ### Profile / discovery (INVOKER reads)
 
@@ -66,10 +104,10 @@ All project-owned DEFINER functions use `SET search_path = public`.
 
 | RPC | Security | Notes |
 |-----|----------|-------|
-| `list_friends` | INVOKER | `friendships_select_own` RLS; returns `user_id` (`261500`) |
+| `list_friends` | INVOKER | `friendships_select_own` RLS |
 | `list_incoming_friend_requests` | INVOKER | Same RLS |
-| `count_my_friends` | **INVOKER** | Same RLS; changed from DEFINER in `251400` |
-| `send_friend_request` | DEFINER | Write — validates discoverability, pair ordering |
+| `count_my_friends` | INVOKER | Changed from DEFINER in `251400` |
+| `send_friend_request` | DEFINER | Write |
 | `accept_friend_request` | DEFINER | Write |
 | `decline_friend_request` | DEFINER | Write |
 | `cancel_friend_request` | DEFINER | Write |
@@ -79,86 +117,75 @@ All project-owned DEFINER functions use `SET search_path = public`.
 
 | RPC | Security | Notes |
 |-----|----------|-------|
-| `list_my_home_experiences` | INVOKER | Participant join + RLS (`experiences_select_participant` + legacy `experiences_select_organizer`) |
-| `get_experience` | INVOKER | Returns `am_organizer`, `am_participant`, `pending_invitation_id`, `can_revive`, `notifications_muted` |
-| `list_experience_participants` | DEFINER | Returns `is_organizer` derived from `organizer_id` |
-| `list_experience_invitations` | DEFINER | Leader + fellow participants |
+| `list_my_home_experiences` | INVOKER | Participant join + RLS |
+| `get_experience` | INVOKER | Viewer flags, mute, pending invite |
 | `list_incoming_experience_invitations` | INVOKER | Invitee-scoped |
+| `list_experience_participants` | DEFINER | Cross-role profile gating; deferred INVOKER |
+| `list_experience_invitations` | DEFINER | Leader + participant views |
 | `list_experience_invite_suggestions` | DEFINER | Leader review queue |
-| `create_experience` | DEFINER | Write + optional invite batch |
-| `update_experience` | DEFINER | Write + date validation + edit policy |
-| `cancel_experience` | DEFINER | Leader-only while `planned` |
-| `delete_experience` | DEFINER | Leader-only while `planned` |
-| `revive_experience` | DEFINER | Participant revive; reviver becomes `organizer_id` |
-| `leave_experience` | DEFINER | Hard-delete participant row; leader must transfer when required |
-| `remove_experience_participant` | DEFINER | Leader-only while `planned` |
-| `transfer_experience_leadership` | DEFINER | Updates `organizer_id` only |
-| `send_experience_invitation` | DEFINER | Leader-only |
-| `accept_experience_invitation` | DEFINER | Invitee-only |
-| `decline_experience_invitation` | DEFINER | Invitee-only |
-| `suggest_experience_invite` | DEFINER | Participant suggest flow |
-| `review_experience_invite_suggestion` | DEFINER | Leader approve/reject |
-| `set_experience_notifications_muted` | DEFINER | Per-participant mute flag |
-| `ensure_experience_transformed` | DEFINER | Lazy transform from ended plan detail |
-| `purge_my_stale_experiences` | DEFINER | Eager purge of cancelled plans past `purge_at` before Home list |
+| `create_experience` … `set_experience_notifications_muted` | DEFINER | Writes — see migrations |
+| `ensure_experience_transformed` | DEFINER | Lazy transform (organizer-only) |
+| `purge_my_stale_experiences` | DEFINER | Eager purge before Home list |
+| `transform_my_due_experiences` | DEFINER | Batch transform before lists |
 
 ### Notifications (M14 foundation — inbox UI in M19)
 
 | RPC | Security | Notes |
 |-----|----------|-------|
-| `list_notifications` | DEFINER | Paginated inbox read; not wired in app UI yet |
-| `count_unread_notifications` | DEFINER | Badge count; not wired in app UI yet |
-| `mark_notification_read` | DEFINER | Single-row read marker |
-| `set_memory_notifications_muted` | DEFINER | Per-participant mute on memories |
+| `list_notifications` | INVOKER | Paginated inbox; RLS `recipient_id = auth.uid()` |
+| `count_unread_notifications` | INVOKER | Badge count |
+| `mark_notification_read` | INVOKER | Own-row UPDATE; RLS mirrors RPC guard (`261620`) |
+| `set_experience_notifications_muted` | DEFINER | Participant row UPDATE — no table grant |
+| `set_memory_notifications_muted` | DEFINER | Participant row UPDATE — no table grant |
 
 ### Memories
 
 | RPC | Security | Notes |
 |-----|----------|-------|
-| `transform_my_due_experiences` | DEFINER | Explicit write side-effect before list (not embedded in reads) |
-| `list_my_memories` | **DEFINER** | See “Memory read RPCs” below |
-| `get_memory` | **DEFINER** | Same |
-| `list_memory_participants` | **DEFINER** | Same — returns `is_leader` derived from `leader_id` |
-| `list_memory_media` | **DEFINER** | Same |
-| `count_my_memories` | **Not granted** | Reserved for future Profile count UI; revoke until wired (`251400`) |
-| `update_memory_info` | DEFINER | Write — not in app yet; grant kept for upcoming edit UI |
-| `update_my_memory_note` | DEFINER | Write |
-| `leave_memory` | DEFINER | Write |
-| `transfer_memory_leadership` | DEFINER | Write — current leader only |
-| `register_memory_photo` | DEFINER | Write + path validation |
-| `delete_memory_photo` | DEFINER | Write + uploader/leader permission |
+| `transform_my_due_experiences` | DEFINER | Explicit write side-effect before list |
+| `list_my_memories` | INVOKER | RLS + participant join (`261620`) |
+| `get_memory` | INVOKER | Same |
+| `list_memory_participants` | INVOKER | RLS + `is_active_memory_participant` gate |
+| `list_memory_media` | INVOKER | RLS on `memory_media` |
+| `count_my_memories` | **Not granted** | Reserved for future Profile UI |
+| `update_memory_info` … `delete_memory_photo` | DEFINER | Writes |
 
 ---
 
-## Memory read RPCs — why SECURITY DEFINER?
+## Intentional remaining Security Advisor warnings
 
-After the M13 RLS fix, `memories` / `memory_participants` / `memory_media` SELECT policies use `is_active_memory_participant()` (DEFINER helper), so **INVOKER reads would likely work** — similar to experiences.
+After `261620`, **36** `authenticated_security_definer_function_executable` warnings are expected and correct, plus **1** `auth_leaked_password_protection` on the **Free plan** (N/A for OTP-only auth — see Authentication).
 
-We **keep DEFINER** for memory reads because:
+| Category | Count | Why keep DEFINER |
+|----------|------:|------------------|
+| Membership helpers (one-arg) | 3 | RLS/Storage recursion break; caller-only |
+| Experience list reads | 3 | Cross-role profile gating; higher INVOKER risk |
+| Domain write + side-effect RPCs | 30 | RPC-only write model — no table write grants |
+| **Total intentional DEFINER** | **36** | |
 
-1. **Explicit permission boundary** — RPC body filters by `auth.uid()` and membership; not relying on RLS alone for cross-table reads (especially `list_memory_participants` exposing other users’ rows).
-2. **Locked architecture** — read RPCs must stay pure `SELECT` (no transform/purge inside reads); DEFINER + explicit SQL is the approved pattern in `PROJECT.md`.
-3. **Stability** — avoids reintroducing 42P17-style recursion if policies change.
+**Domain write + side-effect RPCs (30):** friendship writes (5), experience writes/lifecycle/side-effects (17), memory writes (6), notification mute on participant rows (2).
 
-These will continue to appear in Security Advisor as intentional DEFINER + authenticated EXECUTE.
+Migrating these to INVOKER would require reopening table write grants and duplicating state machines in RLS — **architecturally worse**.
 
----
+**Experience list DEFINER reads (3):** Could be migrated later with careful RLS work; deferred — not worth pre-M15 churn.
 
-## Experience RLS — overlapping SELECT policies
-
-M12 created `experiences_select_organizer` (`organizer_id = auth.uid()`). M14 added `experiences_select_participant` and `experiences_select_pending_invitee`. PostgreSQL OR-combines permissive policies, so overlap is **harmless**.
-
-**Advisor / cleanup note:** `experiences_select_organizer` is **redundant** now that every organizer is also a participant row, but we **keep it until measured** (no behaviour change mid-milestone). Do not drop without `EXPLAIN` on Home list queries.
+**Performance warnings** (RLS initplan, overlapping permissive policies): tracked separately; not part of this security review.
 
 ---
 
 ## Storage RLS
 
-| Bucket | Policy helper | Why EXECUTE on helper |
-|--------|---------------|------------------------|
-| `memories` | `is_active_memory_participant` | PostgreSQL requires EXECUTE on functions referenced in policy expressions for the calling role. |
+| Bucket | Policy helper | Why EXECUTE on one-arg helper |
+|--------|---------------|-------------------------------|
+| `memories` | `is_active_memory_participant(uuid)` | PostgreSQL requires EXECUTE on functions referenced in policy expressions for the calling role. |
 
 Client must **not** call `storage.remove` for lifecycle deletes — DB triggers + Edge Functions handle cleanup.
+
+---
+
+## Experience RLS — overlapping SELECT policies
+
+M12 created `experiences_select_organizer`. M14 added participant and pending-invitee policies. PostgreSQL OR-combines permissive policies — overlap is harmless. `experiences_select_organizer` is redundant but kept until measured.
 
 ---
 
@@ -166,31 +193,22 @@ Client must **not** call `storage.remove` for lifecycle deletes — DB triggers 
 
 | Version | Purpose |
 |---------|---------|
-| `251400` | `rpc_execute_audit.sql` — revoke helper grants, `count_my_friends` → INVOKER, `count_my_memories` unexported |
-| `261601` | Revoke accidental client grant on internal `transform_experience_to_memory` |
-| `261602` | `get_experience` viewer flags; pending-invitee participant list RLS |
-| `261604` | Cancelled experience permission alignment (no leader actions while cancelled) |
-| `261606` | Grant `transfer_memory_leadership` to clients with leader check |
-| `261607` | Drop participant `role` columns; leadership SSOT on authority columns |
-| `261608` | Fix `purge_my_stale_experiences` (`DISTINCT` + `FOR UPDATE` runtime error) |
+| `251400` | RPC EXECUTE audit — revoke internal helper grants; `count_my_friends` → INVOKER |
+| `261601` | Revoke accidental client grant on `transform_experience_to_memory` |
+| `261610` | Membership helper hardening — split one-arg / two-arg; revoke two-arg from clients |
+| `261620` | Memory read RPCs + `mark_notification_read` → INVOKER |
 
 ---
 
-## Advisor checklist (post M14 cleanup)
+## Evaluating Security Advisor warnings
 
-| Warning type | Action |
-|--------------|--------|
-| DEFINER + authenticated on **write RPCs** | **Intentional** — document above |
-| DEFINER + authenticated on **memory read RPCs** | **Intentional** — document above |
-| DEFINER + authenticated on **notification read RPCs** | **Intentional** — foundation for M19 inbox |
-| DEFINER + authenticated on **helpers** | **Fixed** where not required (`251400`) |
-| DEFINER + authenticated on `is_active_memory_participant` | **Intentional** — Storage RLS requirement |
-| `function_search_path_mutable` on project functions | **Fixed** — all use `SET search_path = public` |
-| Leaked password protection | **N/A** — OTP-only auth |
-| `rls_auto_enable` / Supabase internals | **Out of scope** — platform-managed |
-| `db lint`: `FOR UPDATE` with `DISTINCT` | **Fixed** in `261605` (`transform_my_due_experiences`) and `261608` (`purge_my_stale_experiences`) |
-| Redundant `experiences_select_organizer` RLS | **Intentional keep** — measure before drop |
+| Warning | Kairos response |
+|---------|-----------------|
+| DEFINER + authenticated on **write RPCs** | **Expected** — RPC-only write model |
+| DEFINER + authenticated on **one-arg membership helpers** | **Expected** — RLS recursion break; caller-only |
+| DEFINER + authenticated on **experience list read RPCs** | **Expected for now** — deferred INVOKER migration |
+| Leaked password protection | **Accepted on Free plan** — Pro+ only; N/A for OTP-only auth |
+| RLS initplan / multiple permissive policies | Performance — out of scope for security review |
+| Platform internals (`rls_auto_enable`, etc.) | Out of scope |
 
-Goal: correct model, not zero warnings at any cost.
-
-Run `npx supabase db lint --linked` after each migration push to catch SQL errors Supabase Advisor may not surface in the dashboard.
+Run `npx supabase db lint --linked` and `npx supabase db advisors --linked` after each migration push.

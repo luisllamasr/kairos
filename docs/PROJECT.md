@@ -722,7 +722,7 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 
 **Orphan safety net:** `purge_orphaned_memory_rows()` removes child rows whose `memory_id` was deleted outside CASCADE (manual DB edits only). Runs in **daily maintenance cron** — not in read RPCs. Normal deletes use CASCADE.
 
-**Memory read RPCs:** `list_my_memories`, `count_my_memories`, `get_memory`, `list_memory_participants`, and `list_memory_media` are **LANGUAGE sql, STABLE, SECURITY DEFINER, SELECT only**. No purge, no transform inside reads (Postgres read-only transaction error 25006).
+**Memory read RPCs:** Client-granted reads (`list_my_memories`, `get_memory`, `list_memory_participants`, `list_memory_media`) are **LANGUAGE sql, STABLE, SECURITY INVOKER, SELECT only** (`261620`). Internal `count_my_memories` remains DEFINER and is not client-granted. No purge, no transform inside reads (Postgres read-only transaction error 25006).
 
 **Memory RLS (SELECT):** Policies on `memories`, `memory_participants`, and `memory_media` must **not** subquery `memory_participants` directly — that causes **42P17 infinite recursion** when INVOKER code reads those tables. Use `is_active_memory_participant(memory_id)` (SECURITY DEFINER helper) in all three SELECT policies.
 
@@ -1067,11 +1067,11 @@ Add **`handle_profile_delete_experiences`** (mirror memory handler pattern).
 
 ## RPC inventory (M14 — implemented)
 
-**Reads (INVOKER where RLS suffices):** `list_my_home_experiences`, `get_experience`, `list_experience_participants`, `list_experience_invitations`, `list_incoming_experience_invitations`, `list_experience_invite_suggestions`, `list_notifications`, `count_unread_notifications`.
+**Reads (INVOKER where RLS suffices):** `list_my_home_experiences`, `get_experience`, `list_incoming_experience_invitations`, `list_notifications`, `count_unread_notifications`, `mark_notification_read`, `list_my_memories`, `get_memory`, `list_memory_participants`, `list_memory_media`.
 
-**Reads (DEFINER — memory pattern unchanged):** `list_my_memories`, `get_memory`, `list_memory_participants` (returns `is_leader`), `list_memory_media`.
+**Reads (DEFINER — cross-role gating):** `list_experience_participants`, `list_experience_invitations`, `list_experience_invite_suggestions`.
 
-**Writes (SECURITY DEFINER):** `create_experience`, `update_experience`, `cancel_experience`, `delete_experience`, `revive_experience`, `leave_experience`, `remove_experience_participant`, `transfer_experience_leadership`, `send_experience_invitation`, `accept_experience_invitation`, `decline_experience_invitation`, `suggest_experience_invite`, `review_experience_invite_suggestion`, `set_experience_notifications_muted`, `set_memory_notifications_muted`, `mark_notification_read`, `purge_my_stale_experiences`, plus existing memory write RPCs.
+**Writes (SECURITY DEFINER):** `create_experience`, `update_experience`, `cancel_experience`, `delete_experience`, `revive_experience`, `leave_experience`, `remove_experience_participant`, `transfer_experience_leadership`, `send_experience_invitation`, `accept_experience_invitation`, `decline_experience_invitation`, `suggest_experience_invite`, `review_experience_invite_suggestion`, `set_experience_notifications_muted`, `set_memory_notifications_muted`, `purge_my_stale_experiences`, plus existing memory write RPCs.
 
 **Internal / cron (not client-granted):** `transform_experience_to_memory`, `transform_due_experiences`, `transform_my_due_experiences`, `purge_stale_experiences`, profile-delete triggers, notification enqueue helpers, `trim_notification_inbox`, `maintain_notification_retention`.
 
@@ -1357,11 +1357,12 @@ Kairos prefers **controlled RPCs** with business rules in SQL over broad table w
 |--------------|---------|-------|
 | **SECURITY DEFINER** friendship RPCs | Expected — keep | Pair ordering, expiry, simultaneous-accept rules. Reads use INVOKER + RLS. |
 | **SECURITY DEFINER** experience / memory write RPCs | Expected — keep | Dates, leadership columns, edit policies, lifecycle rules. No direct table writes for `authenticated`. |
-| **SECURITY DEFINER** memory + notification read RPCs | Expected — keep | Explicit permission boundary; see SECURITY.md. |
+| **SECURITY DEFINER** experience list read RPCs | Expected for now | Cross-role profile gating; deferred INVOKER migration. |
+| **SECURITY DEFINER** one-arg membership helpers | Expected — keep | RLS/Storage recursion break; caller-only (`261610`). |
 | **SECURITY DEFINER** triggers / cron | Expected — keep | Profile delete, storage cleanup, purge/transform jobs. |
 | **`experiences_select_organizer` overlap** | Keep until measured | Redundant with participant policy but harmless; do not drop without EXPLAIN. |
 | **`rls_auto_enable()`** | Supabase-internal noise | Not owned by this project. No action. |
-| **Leaked password protection** | Not applicable | Email OTP only — no password auth. |
+| **Leaked password protection** | Accepted on Free plan | OTP-only auth — N/A; Pro+ feature only. See `docs/SECURITY.md`. |
 | **`db lint` SQL errors** | Fix when found | e.g. `FOR UPDATE` + `DISTINCT` fixed in `261605`, `261608`. Run `npx supabase db lint --linked` after pushes. |
 
 Do not weaken RLS or remove DEFINER RPCs just to silence the linter.

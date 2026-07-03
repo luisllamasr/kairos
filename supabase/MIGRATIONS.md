@@ -42,6 +42,8 @@ Pre-M13 chain is unchanged (`170000` profiles → `241100` experiences).
 | `261607` | `drop_participant_role.sql` | Drop participant `role` columns + enum; leadership SSOT is `organizer_id` / `leader_id` |
 | `261608` | `purge_my_stale_experiences_fix.sql` | Fix `purge_my_stale_experiences` (`DISTINCT` + `FOR UPDATE` runtime error) |
 | `261609` | `notification_retention.sql` | Inbox cap (50/user), 30-day read TTL, trim on enqueue; daily cron via `maintain_orphaned_memories` |
+| `261610` | `membership_helper_hardening.sql` | Split helper overloads; revoke two-arg from clients (close probe) |
+| `261620` | `read_rpc_invoker_alignment.sql` | Memory read RPCs + `mark_notification_read` → SECURITY INVOKER (pre-M15 security review) |
 
 Security model: `docs/SECURITY.md`.
 
