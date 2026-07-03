@@ -1,11 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -13,13 +13,16 @@ import {
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
+import { DetailLoadingSlot } from '@/components/DetailLoadingSlot';
 import { MemoryParticipantActionsMenu } from '@/components/MemoryParticipantActionsMenu';
 import { MemoryPhotoViewer } from '@/components/MemoryPhotoViewer';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { TAB_SCREEN_EDGES, DISABLE_SCROLL_INSET_ADJUSTMENT } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { TEXT_LIMITS, isWithinTextLimit } from '@/constants/text-limits';
 import { useAuth } from '@/context/auth-context';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { formatExperienceRange } from '@/lib/experience-dates';
@@ -54,7 +57,6 @@ export default function MemoryDetailScreen() {
   const [media, setMedia] = useState<MemoryMedia[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [personalNote, setPersonalNote] = useState('');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -81,11 +83,9 @@ export default function MemoryDetailScreen() {
   const loadMemory = useCallback(async () => {
     if (!id || typeof id !== 'string') {
       setMemory(null);
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
     setError(false);
 
     const [memoryResult, participantsResult, mediaResult] = await Promise.all([
@@ -97,7 +97,6 @@ export default function MemoryDetailScreen() {
     if (memoryResult.error || participantsResult.error || mediaResult.error || !memoryResult.data) {
       setMemory(null);
       setError(true);
-      setLoading(false);
       return;
     }
 
@@ -105,15 +104,18 @@ export default function MemoryDetailScreen() {
     setParticipants(participantsResult.data);
     setMedia(mediaResult.data);
     setPersonalNote(memoryResult.data.my_personal_note ?? '');
-    setLoading(false);
     await loadPhotoUrls(mediaResult.data);
   }, [id, loadPhotoUrls]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadMemory();
-    }, [loadMemory]),
-  );
+  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadMemory);
+
+  useEffect(() => {
+    resetLoaded();
+  }, [id, resetLoaded]);
+
+  const contentMemory = memory?.id === id ? memory : null;
+  const showDetailLoader = initialLoading && !contentMemory;
+  const showDetailError = !initialLoading && !contentMemory && (error || !memory);
 
   function participantLabel(participant: MemoryParticipant): string {
     return memoryParticipantDisplayName(participant, {
@@ -191,7 +193,7 @@ export default function MemoryDetailScreen() {
       return;
     }
 
-    await loadMemory();
+    await refresh();
   }
 
   function handleDeletePhotoPress(item: MemoryMedia) {
@@ -224,7 +226,7 @@ export default function MemoryDetailScreen() {
     }
 
     setPhotoViewerOpen(false);
-    await loadMemory();
+    await refresh();
   }
 
   async function runLeave() {
@@ -256,7 +258,7 @@ export default function MemoryDetailScreen() {
       return;
     }
 
-    await loadMemory();
+    await refresh();
   }
 
   function handleLeavePress() {
@@ -306,7 +308,7 @@ export default function MemoryDetailScreen() {
   const activeParticipants = participants.filter(isMemoryParticipantActive);
 
   return (
-    <Screen avoidKeyboard edges={['top', 'left', 'right']}>
+    <Screen avoidKeyboard scroll={false} edges={TAB_SCREEN_EDGES}>
       <Button
         label={t('memories.back')}
         variant="secondary"
@@ -314,40 +316,44 @@ export default function MemoryDetailScreen() {
         style={styles.backButton}
       />
 
-      {loading && <ActivityIndicator color={colors.brand} style={styles.loader} />}
+      <DetailLoadingSlot active={showDetailLoader} />
 
-      {!loading && (error || !memory) && (
+      {showDetailError && (
         <View style={styles.stateBlock}>
           <Text variant="error" style={styles.centered}>
             {t('memories.detail.loadError')}
           </Text>
-          <Button label={t('error.retry')} onPress={loadMemory} />
+          <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
         </View>
       )}
 
-      {!loading && memory && (
-        <View style={styles.content}>
+      {contentMemory && (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          {...DISABLE_SCROLL_INSET_ADJUSTMENT}
+        >
           <Text variant="hero" style={styles.title}>
-            {memory.title}
+            {contentMemory.title}
           </Text>
 
           <Text variant="subtitle" style={styles.range}>
             {formatExperienceRange(
-              memory.happened_starts_at,
-              memory.happened_ends_at,
+              contentMemory.happened_starts_at,
+              contentMemory.happened_ends_at,
               localeTag,
             )}
           </Text>
 
-          {memory.location_name ? (
+          {contentMemory.location_name ? (
             <Text variant="body" style={styles.body}>
-              {memory.location_name}
+              {contentMemory.location_name}
             </Text>
           ) : null}
 
-          {memory.description ? (
+          {contentMemory.description ? (
             <Text variant="body" style={styles.body}>
-              {memory.description}
+              {contentMemory.description}
             </Text>
           ) : null}
 
@@ -369,7 +375,7 @@ export default function MemoryDetailScreen() {
                       <Text variant="caption">{t('memories.detail.leader')}</Text>
                     ) : null}
                   </View>
-                  {memory.am_leader &&
+                  {contentMemory.am_leader &&
                   participant.user_id !== null &&
                   !participant.is_leader &&
                   participant.user_id !== myUserId ? (
@@ -468,7 +474,7 @@ export default function MemoryDetailScreen() {
             onPress={handleLeavePress}
             loading={actionLoading}
           />
-        </View>
+        </ScrollView>
       )}
 
       <MemoryPhotoViewer
@@ -520,7 +526,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   section: {
-    marginTop: Spacing.lg,
+    marginTop: Spacing.md,
     gap: Spacing.sm,
   },
   sectionTitle: {

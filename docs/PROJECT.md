@@ -151,7 +151,7 @@ Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
 # Current status
 
 Phase:
-Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, and **M14 shared experiences** complete (validated + cleanup pass).
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, and **M14 shared experiences** complete — including notification retention and list/detail UX polish.
 
 Created by:
 Luis Llamas Ramón
@@ -222,12 +222,12 @@ Build **Create → Live → Remember** in order. Full milestone breakdown and pr
 | **12. Experiences** ✓ | Dated private plans; auto `transform_at`; cancel/remove; Home = planned + cancelled-until-purge |
 | **13. Memories** ✓ | Shared memory core + personal layer; automatic transform; timeline |
 | **13.5 Cleanup** ✓ | Photo delete, migration squash, storage lifecycle, security audit |
-| **14. Shared experiences** ✓ | Invites, suggest flow, group transform, notifications foundation |
+| **14. Shared experiences** ✓ | Invites, suggest flow, group transform, notifications foundation + inbox retention |
 | **15. Experience chat** | Purpose-bound coordination; not DMs |
 | **16. Public experiences** | Discoverable plans; open join |
 | **17. Join approval** | Request → approve/decline |
 | **18. Opportunities** | Catalog → “Plan this” → experience |
-| **19. Notifications UX** | Inbox, badges, push — builds on M14 notification rows |
+| **19. Notifications UX** | Inbox UI, badges, push — builds on M14 notification rows (retention already shipped) |
 
 ## Phase D — Community inspiration (later)
 
@@ -829,7 +829,7 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Milestone 19 — Notifications UX** (retention + inbox) and UX polish — builds on M14 notification rows and shared experiences.
+**Milestone 15 — Experience chat** — next after M14 completion (retention + UX polish).
 
 ---
 
@@ -1043,6 +1043,19 @@ When enqueueing notifications for an experience/memory event, skip recipients wh
 
 **Default:** unmuted. UI copy: “Mute notifications for this plan/memory.”
 
+### Inbox retention (M14 completion)
+
+Keeps notification rows bounded before M19 inbox UI ships. Entity lifecycle purge (`purge_entity_notifications`, invitation resolve, experience end) is unchanged and runs in addition to these rules.
+
+| Rule | Behavior |
+|------|----------|
+| **Cap** | Max **50** rows per `recipient_id`. After each insert, `trim_notification_inbox` deletes oldest **read** rows first; if still over cap, deletes oldest rows regardless of read state. |
+| **Read TTL** | Rows with `read_at` older than **30 days** are deleted by `maintain_notification_retention`. |
+| **Unread** | Preserved until cap trim or entity purge — no time-based delete for unread rows. |
+| **Schedule** | Daily: `maintain_orphaned_memories()` calls `maintain_notification_retention()` (same cron as orphan memory purge). Per-insert trim runs inside `enqueue_notification`. |
+
+Replaces the earlier 90-day `maintain_stale_notifications` helper (dropped in `261609`).
+
 ## Account deletion (M14)
 
 | Domain | Behavior |
@@ -1060,7 +1073,7 @@ Add **`handle_profile_delete_experiences`** (mirror memory handler pattern).
 
 **Writes (SECURITY DEFINER):** `create_experience`, `update_experience`, `cancel_experience`, `delete_experience`, `revive_experience`, `leave_experience`, `remove_experience_participant`, `transfer_experience_leadership`, `send_experience_invitation`, `accept_experience_invitation`, `decline_experience_invitation`, `suggest_experience_invite`, `review_experience_invite_suggestion`, `set_experience_notifications_muted`, `set_memory_notifications_muted`, `mark_notification_read`, `purge_my_stale_experiences`, plus existing memory write RPCs.
 
-**Internal / cron (not client-granted):** `transform_experience_to_memory`, `transform_due_experiences`, `transform_my_due_experiences`, `purge_stale_experiences`, profile-delete triggers, notification enqueue helpers.
+**Internal / cron (not client-granted):** `transform_experience_to_memory`, `transform_due_experiences`, `transform_my_due_experiences`, `purge_stale_experiences`, profile-delete triggers, notification enqueue helpers, `trim_notification_inbox`, `maintain_notification_retention`.
 
 ## Explicitly out of M14
 

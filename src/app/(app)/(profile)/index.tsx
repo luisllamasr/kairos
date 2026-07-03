@@ -1,15 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
+import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { MemoryListRow } from '@/components/MemoryListRow';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { TAB_SCREEN_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { countMyFriends, listIncomingFriendRequests } from '@/lib/friendships';
@@ -25,13 +28,11 @@ export default function ProfileScreen() {
   const [incomingRequestCount, setIncomingRequestCount] = useState(0);
   const [friendCount, setFriendCount] = useState(0);
   const [memories, setMemories] = useState<MemoryListItem[]>([]);
-  const [memoriesLoading, setMemoriesLoading] = useState(true);
   const [memoriesError, setMemoriesError] = useState(false);
 
   const avatarUri = getAvatarPublicUrl(profile?.avatar_url ?? null);
 
   const loadProfile = useCallback(async () => {
-    setMemoriesLoading(true);
     setMemoriesError(false);
 
     const [requestsResult, friendsResult] = await Promise.all([
@@ -56,18 +57,12 @@ export default function ProfileScreen() {
       setMemories(memoriesResult.data);
       setMemoriesError(false);
     }
-
-    setMemoriesLoading(false);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadProfile();
-    }, [loadProfile]),
-  );
+  const { initialLoading, refresh } = useFocusRefresh(loadProfile);
 
   return (
-    <Screen edges={['top', 'left', 'right']} style={styles.screen}>
+    <Screen edges={TAB_SCREEN_EDGES} style={styles.screen}>
       <View style={styles.topBar}>
         <View style={styles.topBarSide} />
         <Pressable
@@ -96,7 +91,7 @@ export default function ProfileScreen() {
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text variant="title">{memories.length}</Text>
+            <Text variant="title">{initialLoading ? '—' : memories.length}</Text>
             <Text variant="caption">{t('profile.stats.memories')}</Text>
           </View>
 
@@ -105,7 +100,7 @@ export default function ProfileScreen() {
             onPress={() => router.push('/(app)/(profile)/friends')}
             style={({ pressed }) => [styles.stat, styles.statPressable, pressed && styles.pressed]}
           >
-            <Text variant="title">{friendCount}</Text>
+            <Text variant="title">{initialLoading ? '—' : friendCount}</Text>
             <Text variant="caption">{t('profile.stats.friends')}</Text>
           </Pressable>
         </View>
@@ -147,14 +142,15 @@ export default function ProfileScreen() {
           ) : null}
         </View>
 
-        {memoriesLoading ? (
-          <ActivityIndicator color={colors.brand} style={styles.memoriesLoader} />
-        ) : null}
+        <ListLoadingSlot active={initialLoading && memories.length === 0} />
 
-        {!memoriesLoading && memoriesError ? (
+        {!initialLoading && memoriesError ? (
           <View style={styles.inlineState}>
             <Text variant="error">{t('memories.loadError')}</Text>
-            <Pressable onPress={loadProfile} style={({ pressed }) => pressed && styles.pressed}>
+            <Pressable
+              onPress={() => void refresh({ showLoading: true })}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
               <Text variant="body" style={{ color: colors.brand }}>
                 {t('error.retry')}
               </Text>
@@ -162,13 +158,13 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        {!memoriesLoading && !memoriesError && memories.length === 0 ? (
+        {!initialLoading && !memoriesError && memories.length === 0 ? (
           <Text variant="subtitle" style={styles.emptyMemories}>
             {t('profile.memoriesSection.empty')}
           </Text>
         ) : null}
 
-        {!memoriesLoading && !memoriesError
+        {memories.length > 0
           ? memories.map((item) => (
               <MemoryListRow
                 key={item.id}

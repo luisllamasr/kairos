@@ -1,15 +1,18 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
+import { DetailLoadingSlot } from '@/components/DetailLoadingSlot';
 import { ExperienceFriendPicker } from '@/components/ExperienceFriendPicker';
 import { ExperienceParticipantActionsMenu } from '@/components/ExperienceParticipantActionsMenu';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { formatExperienceRange } from '@/lib/experience-dates';
@@ -62,7 +65,6 @@ export default function ExperienceDetailScreen() {
   const [participants, setParticipants] = useState<ExperienceParticipant[]>([]);
   const [invitations, setInvitations] = useState<ExperienceInvitation[]>([]);
   const [suggestions, setSuggestions] = useState<ExperienceInviteSuggestion[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -86,11 +88,9 @@ export default function ExperienceDetailScreen() {
   const loadExperience = useCallback(async () => {
     if (!id || typeof id !== 'string') {
       setExperience(null);
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
     setError(false);
 
     const { data, error: loadError } = await getExperience(id);
@@ -100,7 +100,6 @@ export default function ExperienceDetailScreen() {
       setInvitations([]);
       setSuggestions([]);
       setError(loadError);
-      setLoading(false);
       return;
     }
 
@@ -119,7 +118,6 @@ export default function ExperienceDetailScreen() {
       if (transformError) {
         setExperience(data);
         setError(true);
-        setLoading(false);
         return;
       }
     }
@@ -139,14 +137,17 @@ export default function ExperienceDetailScreen() {
     setInvitations(invitationsResult.data);
     setSuggestions(suggestionsResult.data);
     setError(participantsResult.error);
-    setLoading(false);
   }, [id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadExperience();
-    }, [loadExperience]),
-  );
+  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadExperience);
+
+  useEffect(() => {
+    resetLoaded();
+  }, [id, resetLoaded]);
+
+  const contentExperience = experience?.id === id ? experience : null;
+  const showDetailLoader = initialLoading && !contentExperience;
+  const showDetailError = !initialLoading && !contentExperience && (error || !experience);
 
   const upcoming = experience ? isExperienceUpcoming(experience) : false;
   const ended = experience ? isExperienceEnded(experience) : false;
@@ -290,7 +291,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.error.cancel'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runRemove() {
@@ -329,7 +330,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.error.revive'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runRemoveParticipant(userId: string) {
@@ -342,7 +343,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.error.removeParticipant'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runTransfer(newOrganizerId: string) {
@@ -355,7 +356,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.error.transfer'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runSendInvite() {
@@ -370,7 +371,7 @@ export default function ExperienceDetailScreen() {
     }
     setSelectedFriendIds([]);
     setShowInvitePicker(false);
-    await loadExperience();
+    await refresh();
   }
 
   async function runSuggestInvite() {
@@ -385,7 +386,7 @@ export default function ExperienceDetailScreen() {
     }
     setSelectedFriendIds([]);
     setShowSuggestPicker(false);
-    await loadExperience();
+    await refresh();
   }
 
   async function runReviewSuggestion(suggestionId: string, approve: boolean) {
@@ -397,7 +398,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.error.reviewSuggestion'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runToggleMute() {
@@ -413,7 +414,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.error.mute'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runAcceptInvitation() {
@@ -426,7 +427,7 @@ export default function ExperienceDetailScreen() {
       setActionError(t('experiences.detail.invitationAcceptError'));
       return;
     }
-    await loadExperience();
+    await refresh();
   }
 
   async function runDeclineInvitation() {
@@ -443,7 +444,7 @@ export default function ExperienceDetailScreen() {
   }
 
   return (
-    <Screen edges={['top', 'left', 'right']}>
+    <Screen scroll={false} edges={['top', 'left', 'right']}>
       <Button
         label={t('experiences.back')}
         variant="secondary"
@@ -451,19 +452,23 @@ export default function ExperienceDetailScreen() {
         style={styles.backButton}
       />
 
-      {loading && <ActivityIndicator color={colors.brand} style={styles.loader} />}
+      <DetailLoadingSlot active={showDetailLoader} />
 
-      {!loading && (error || !experience) && (
+      {showDetailError && (
         <View style={styles.stateBlock}>
           <Text variant="error" style={styles.centered}>
             {t('experiences.error.load')}
           </Text>
-          <Button label={t('error.retry')} onPress={loadExperience} />
+          <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
         </View>
       )}
 
-      {!loading && experience && (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {contentExperience && (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          {...DISABLE_SCROLL_INSET_ADJUSTMENT}
+        >
           {cancelled ? (
             <Text variant="caption" style={styles.statusBanner}>
               {t('experiences.status.cancelled')}
@@ -471,22 +476,22 @@ export default function ExperienceDetailScreen() {
           ) : null}
 
           <Text variant="hero" style={styles.title}>
-            {experience.title}
+            {contentExperience.title}
           </Text>
 
           <Text variant="subtitle" style={styles.range}>
-            {formatExperienceRange(experience.starts_at, experience.ends_at, localeTag)}
+            {formatExperienceRange(contentExperience.starts_at, contentExperience.ends_at, localeTag)}
           </Text>
 
-          {experience.location_name ? (
+          {contentExperience.location_name ? (
             <Text variant="body" style={styles.body}>
-              {experience.location_name}
+              {contentExperience.location_name}
             </Text>
           ) : null}
 
-          {experience.description ? (
+          {contentExperience.description ? (
             <Text variant="body" style={styles.body}>
-              {experience.description}
+              {contentExperience.description}
             </Text>
           ) : null}
 
@@ -626,7 +631,7 @@ export default function ExperienceDetailScreen() {
                 onPress={() =>
                   router.push({
                     pathname: '/(app)/(home)/[id]/edit',
-                    params: { id: experience.id },
+                    params: { id: contentExperience.id },
                   })
                 }
                 disabled={actionLoading}
@@ -706,7 +711,7 @@ export default function ExperienceDetailScreen() {
             {isMember && !cancelled ? (
               <Button
                 label={
-                  experience.notifications_muted
+                  contentExperience.notifications_muted
                     ? t('experiences.notifications.unmute')
                     : t('experiences.notifications.mute')
                 }

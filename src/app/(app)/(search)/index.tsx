@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, View } from 'react-native';
 
+import { InsetView } from '@/components/InsetView';
 import { Input } from '@/components/Input';
+import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { Text } from '@/components/Text';
 import { UserSearchResult } from '@/components/UserSearchResult';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
@@ -14,7 +16,7 @@ import { normalizeUsernameQuery, searchProfiles, USERNAME_SEARCH_MIN_LENGTH } fr
 import { PublicProfile } from '@/types/public-profile';
 
 const SEARCH_DEBOUNCE_MS = 300;
-const EDGES: Edge[] = ['top', 'left', 'right'];
+const EDGES = TAB_SAFE_AREA_EDGES;
 
 export default function SearchScreen() {
   const { session } = useAuth();
@@ -65,10 +67,11 @@ export default function SearchScreen() {
   const showNoResults = searched && !loading && !error && results.length === 0;
 
   return (
-    <SafeAreaView edges={EDGES} style={[styles.safe, { backgroundColor: colors.background }]}>
+    <InsetView edges={EDGES} style={{ backgroundColor: colors.background }}>
       <FlatList
         data={results}
         keyExtractor={(item) => item.username}
+        {...DISABLE_SCROLL_INSET_ADJUSTMENT}
         renderItem={({ item }) => (
           <UserSearchResult
             profile={item}
@@ -83,7 +86,7 @@ export default function SearchScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         ListHeaderComponent={
-          <>
+          <View>
             <Text variant="title" style={styles.title}>
               {t('search.title')}
             </Text>
@@ -108,11 +111,7 @@ export default function SearchScreen() {
               </Text>
             )}
 
-            {loading && (
-              <View style={styles.centeredRow}>
-                <ActivityIndicator color={colors.brand} />
-              </View>
-            )}
+            <ListLoadingSlot active={loading && results.length === 0} />
 
             {error && (
               <Text variant="error" style={styles.message}>
@@ -125,24 +124,22 @@ export default function SearchScreen() {
                 {t('search.noResults')}
               </Text>
             )}
-          </>
+          </View>
         }
       />
-    </SafeAreaView>
+    </InsetView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   content: {
-    flexGrow: 1,
     padding: Spacing.lg,
   },
   title: {
     marginBottom: Spacing.xs,
   },
   subtitle: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   input: {
     marginBottom: Spacing.sm,
@@ -152,9 +149,5 @@ const styles = StyleSheet.create({
   },
   message: {
     marginBottom: Spacing.md,
-  },
-  centeredRow: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
   },
 });

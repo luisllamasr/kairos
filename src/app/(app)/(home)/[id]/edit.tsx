@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { DetailLoadingSlot } from '@/components/DetailLoadingSlot';
 import { ExperienceForm } from '@/components/ExperienceForm';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useI18n } from '@/i18n';
 import { CreateExperienceInput, getExperience, updateExperience } from '@/lib/experiences';
 import { Experience, canEditExperience } from '@/types/experience';
@@ -14,21 +15,17 @@ import { Experience, canEditExperience } from '@/types/experience';
 export default function EditExperienceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useI18n();
-  const colors = useTheme();
 
   const [experience, setExperience] = useState<Experience | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadExperience = useCallback(async () => {
     if (!id || typeof id !== 'string') {
       setExperience(null);
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
     setError(null);
 
     const { data, error: loadError } = await getExperience(id);
@@ -41,13 +38,17 @@ export default function EditExperienceScreen() {
     } else {
       setExperience(data);
     }
-
-    setLoading(false);
   }, [id, t]);
 
+  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadExperience);
+
   useEffect(() => {
-    void loadExperience();
-  }, [loadExperience]);
+    resetLoaded();
+  }, [id, resetLoaded]);
+
+  const contentExperience = experience?.id === id ? experience : null;
+  const showDetailLoader = initialLoading && !contentExperience;
+  const showLoadError = !initialLoading && Boolean(error);
 
   async function handleSubmit(values: CreateExperienceInput) {
     if (!experience) return;
@@ -76,22 +77,22 @@ export default function EditExperienceScreen() {
         {t('experiences.edit.title')}
       </Text>
 
-      {loading && <ActivityIndicator color={colors.brand} style={styles.loader} />}
+      <DetailLoadingSlot active={showDetailLoader} />
 
-      {!loading && error && (
+      {showLoadError && (
         <Text variant="error" style={styles.error}>
           {error}
         </Text>
       )}
 
-      {!loading && experience && (
+      {contentExperience && (
         <ExperienceForm
           initialValues={{
-            title: experience.title,
-            description: experience.description,
-            locationName: experience.location_name,
-            startsAt: experience.starts_at,
-            endsAt: experience.ends_at,
+            title: contentExperience.title,
+            description: contentExperience.description,
+            locationName: contentExperience.location_name,
+            startsAt: contentExperience.starts_at,
+            endsAt: contentExperience.ends_at,
           }}
           submitLabel={t('experiences.edit.submit')}
           loading={saving}
@@ -106,10 +107,6 @@ export default function EditExperienceScreen() {
 const styles = StyleSheet.create({
   title: {
     marginBottom: Spacing.lg,
-  },
-  loader: {
-    marginTop: Spacing.xl,
-    alignSelf: 'center',
   },
   error: {
     marginTop: Spacing.md,

@@ -46,6 +46,7 @@ All project-owned DEFINER functions use `SET search_path = public`.
 | `elect_memory_leader`, `purge_memory_if_orphaned` | **No** | Internal only. |
 | `transfer_memory_leadership` | **Yes** | Leader-only write RPC (⋮ menu on memory detail). |
 | `purge_orphaned_*`, `maintain_orphaned_memories`, `transform_due_experiences`, `purge_stale_experiences` | **No** | Cron / internal only. |
+| `trim_notification_inbox`, `maintain_notification_retention` | **No** | Inbox cap + read TTL; called from enqueue + daily cron. |
 | `transform_experience_to_memory`, `transform_my_due_experiences`, `purge_my_stale_experiences` | **`transform_my_due_experiences` + `purge_my_stale_experiences` yes**; transform single-row internal | Explicit client write RPCs before list/detail; batch transform cron internal. |
 | Trigger functions (`handle_*`, `trigger_storage_cleanup_*`) | **No** | Trigger-only. |
 | Notification enqueue helpers (`enqueue_notification`, `notify_experience_participants`, …) | **No** | Called from write RPCs only. |

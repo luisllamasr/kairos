@@ -1,14 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
+import { DetailLoadingSlot } from '@/components/DetailLoadingSlot';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
-import { useTheme } from '@/hooks/use-theme';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useI18n } from '@/i18n';
 import {
   acceptFriendRequest,
@@ -26,10 +27,8 @@ export default function PublicProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { profile: ownProfile } = useAuth();
   const { t } = useI18n();
-  const colors = useTheme();
 
   const [publicProfile, setPublicProfile] = useState<PublicProfileWithRelationship | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -38,11 +37,11 @@ export default function PublicProfileScreen() {
   const loadProfile = useCallback(async () => {
     if (!username || typeof username !== 'string') {
       setNotFound(true);
-      setLoading(false);
+      setError(false);
+      setPublicProfile(null);
       return;
     }
 
-    setLoading(true);
     setError(false);
     setNotFound(false);
     setActionError(false);
@@ -58,23 +57,29 @@ export default function PublicProfileScreen() {
     } else {
       setPublicProfile(data);
     }
-
-    setLoading(false);
   }, [username]);
 
+  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadProfile);
+
   useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
+    resetLoaded();
+  }, [username, resetLoaded]);
+
+  const contentProfile =
+    publicProfile && publicProfile.username === username ? publicProfile : null;
+  const showDetailLoader = initialLoading && !contentProfile;
+  const showLoadError = !initialLoading && error;
+  const showNotFound = !initialLoading && notFound;
 
   const isSelf = Boolean(
-    publicProfile && ownProfile?.username && publicProfile.username === ownProfile.username,
+    contentProfile && ownProfile?.username && contentProfile.username === ownProfile.username,
   );
 
-  const avatarUri = getAvatarPublicUrl(publicProfile?.avatar_url ?? null);
-  const relationshipStatus: RelationshipStatus = publicProfile?.relationship_status ?? 'none';
+  const avatarUri = getAvatarPublicUrl(contentProfile?.avatar_url ?? null);
+  const relationshipStatus: RelationshipStatus = contentProfile?.relationship_status ?? 'none';
 
   async function runFriendshipAction(action: () => Promise<{ ok: boolean; error: boolean }>) {
-    if (!publicProfile) return;
+    if (!contentProfile) return;
 
     setActionLoading(true);
     setActionError(false);
@@ -86,32 +91,32 @@ export default function PublicProfileScreen() {
       return;
     }
 
-    await loadProfile();
+    await refresh();
     setActionLoading(false);
   }
 
   function handleAddFriend() {
-    if (!publicProfile) return;
-    void runFriendshipAction(() => sendFriendRequest(publicProfile.username));
+    if (!contentProfile) return;
+    void runFriendshipAction(() => sendFriendRequest(contentProfile.username));
   }
 
   function handleAcceptRequest() {
-    if (!publicProfile) return;
-    void runFriendshipAction(() => acceptFriendRequest(publicProfile.username));
+    if (!contentProfile) return;
+    void runFriendshipAction(() => acceptFriendRequest(contentProfile.username));
   }
 
   function handleDeclineRequest() {
-    if (!publicProfile) return;
-    void runFriendshipAction(() => declineFriendRequest(publicProfile.username));
+    if (!contentProfile) return;
+    void runFriendshipAction(() => declineFriendRequest(contentProfile.username));
   }
 
   function handleCancelRequest() {
-    if (!publicProfile) return;
-    void runFriendshipAction(() => cancelFriendRequest(publicProfile.username));
+    if (!contentProfile) return;
+    void runFriendshipAction(() => cancelFriendRequest(contentProfile.username));
   }
 
   function handleRemoveFriend() {
-    if (!publicProfile || actionLoading) return;
+    if (!contentProfile || actionLoading) return;
 
     Alert.alert(t('publicProfile.removeFriend.title'), t('publicProfile.removeFriend.message'), [
       { text: t('publicProfile.removeFriend.cancel'), style: 'cancel' },
@@ -119,14 +124,14 @@ export default function PublicProfileScreen() {
         text: t('publicProfile.removeFriend.confirm'),
         style: 'destructive',
         onPress: () => {
-          void runFriendshipAction(() => removeFriend(publicProfile.username));
+          void runFriendshipAction(() => removeFriend(contentProfile.username));
         },
       },
     ]);
   }
 
   function renderFriendshipActions() {
-    if (!publicProfile || isSelf) return null;
+    if (!contentProfile || isSelf) return null;
 
     switch (relationshipStatus) {
       case 'none':
@@ -200,18 +205,22 @@ export default function PublicProfileScreen() {
         style={styles.backButton}
       />
 
-      {loading && <ActivityIndicator color={colors.brand} style={styles.loader} />}
+      <DetailLoadingSlot active={showDetailLoader} />
 
-      {!loading && error && (
+      {showLoadError && (
         <View style={styles.stateBlock}>
           <Text variant="error" style={styles.centeredText}>
             {t('publicProfile.loadError')}
           </Text>
-          <Button label={t('error.retry')} onPress={loadProfile} style={styles.retryButton} />
+          <Button
+            label={t('error.retry')}
+            onPress={() => void refresh({ showLoading: true })}
+            style={styles.retryButton}
+          />
         </View>
       )}
 
-      {!loading && notFound && (
+      {showNotFound && (
         <View style={styles.stateBlock}>
           <Text variant="title" style={styles.centeredText}>
             {t('publicProfile.notFound')}
@@ -222,19 +231,19 @@ export default function PublicProfileScreen() {
         </View>
       )}
 
-      {!loading && publicProfile && (
+      {contentProfile && (
         <View style={styles.profileBlock}>
           <Avatar
             uri={avatarUri}
-            displayName={publicProfile.display_name}
+            displayName={contentProfile.display_name}
             size={88}
             style={styles.avatar}
           />
           <Text variant="hero" style={styles.centeredText}>
-            {publicProfile.display_name ?? publicProfile.username}
+            {contentProfile.display_name ?? contentProfile.username}
           </Text>
           <Text variant="subtitle" style={styles.username}>
-            @{publicProfile.username}
+            @{contentProfile.username}
           </Text>
 
           {isSelf && (

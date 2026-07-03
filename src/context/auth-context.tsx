@@ -16,8 +16,31 @@ import {
   setAuthRemoveMode,
   updateAccountSnapshot,
 } from '@/lib/auth-storage';
+import { resetAppNavigationToHome } from '@/navigation/reset-app-navigation';
 import { supabase } from '@/lib/supabase';
 import { Profile } from '@/types/profile';
+
+function profileFromSnapshot(
+  userId: string,
+  snap: Pick<RememberedAccount, 'username' | 'display_name' | 'avatar_url'>,
+): Profile {
+  return {
+    id: userId,
+    username: snap.username,
+    display_name: snap.display_name,
+    avatar_url: snap.avatar_url,
+    created_at: '',
+    updated_at: '',
+  };
+}
+
+function hydrateProfileFromAccounts(
+  userId: string,
+  remembered: RememberedAccount[],
+): Profile | null {
+  const snap = remembered.find((account) => account.userId === userId);
+  return snap ? profileFromSnapshot(userId, snap) : null;
+}
 
 interface AuthContextValue {
   session: Session | null;
@@ -27,6 +50,7 @@ interface AuthContextValue {
   // true when the session exists but the profile fetch failed (network error, DB issue).
   profileError: boolean;
   loading: boolean;
+  profileLoading: boolean;
   /** Remembered accounts on this device (active sessions and signed-out snapshots). */
   accounts: RememberedAccount[];
   refreshProfile: () => Promise<void>;
@@ -63,7 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const activateStoredAccount = useCallback(
-    async (userId: string, navigateHome: boolean): Promise<boolean> => {
+    async (
+      userId: string,
+      navigateHome: boolean,
+      options?: { resetProfileStack?: boolean },
+    ): Promise<boolean> => {
       const stored = await getStoredSessionJson(userId);
       if (!stored) {
         return false;
@@ -99,11 +127,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
+      if (navigateHome) {
+        resetAppNavigationToHome({ resetProfileStack: options?.resetProfileStack });
+      }
+
       setSession(sessionData.session);
       sessionRef.current = sessionData.session;
-      if (navigateHome) {
-        router.replace('/(app)/(home)');
+
+      const remembered = await listRememberedAccounts();
+      const hydrated = hydrateProfileFromAccounts(userId, remembered);
+      if (hydrated) {
+        setProfile(hydrated);
       }
+
       return true;
     },
     [],
@@ -114,8 +150,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     syncAccounts();
 
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!mounted) return;
+
+      const remembered = await listRememberedAccounts();
+      if (mounted) setAccounts(remembered);
+
+      if (initialSession) {
+        const hydrated = hydrateProfileFromAccounts(initialSession.user.id, remembered);
+        if (hydrated) setProfile(hydrated);
+      }
+
       setSession(initialSession);
       setAuthInitialized(true);
     });
@@ -179,13 +224,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const userId = session.user.id;
+
     setProfileLoading(true);
     setProfileError(false);
+
+    void listRememberedAccounts().then((remembered) => {
+      if (!mounted) return;
+      setProfile((prev) => {
+        if (prev?.id === userId) return prev;
+        return hydrateProfileFromAccounts(userId, remembered);
+      });
+    });
 
     supabase
       .from('profiles')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .single()
       .then(async ({ data, error }) => {
         if (!mounted) return;
@@ -196,7 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(data);
           setProfileError(false);
-          await updateAccountSnapshot(session.user.id, {
+          await updateAccountSnapshot(userId, {
             email: session.user.email ?? '',
             username: data.username,
             display_name: data.display_name,
@@ -211,7 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [session, authInitialized, syncAccounts]);
+  }, [session?.user?.id, authInitialized, syncAccounts]);
 
   const refreshProfile = useCallback(async () => {
     const currentSession = sessionRef.current;
@@ -240,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const switchAccount = useCallback(
     async (userId: string): Promise<boolean> => {
       if (sessionRef.current?.user.id === userId) {
-        router.replace('/(app)/(home)');
+        resetAppNavigationToHome({ resetProfileStack: true });
         return true;
       }
 
@@ -248,7 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      const ok = await activateStoredAccount(userId, true);
+      const ok = await activateStoredAccount(userId, true, { resetProfileStack: true });
       await syncAccounts();
       return ok;
     },
@@ -416,7 +471,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         profileError,
-        loading: !authInitialized || profileLoading || authTransitioning,
+        loading: !authInitialized || authTransitioning,
+        profileLoading,
         accounts,
         refreshProfile,
         switchAccount,

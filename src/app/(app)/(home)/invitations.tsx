@@ -1,12 +1,15 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { InsetView } from '@/components/InsetView';
 
 import { Button } from '@/components/Button';
 import { IncomingExperienceInvitationRow } from '@/components/IncomingExperienceInvitationRow';
+import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { Text } from '@/components/Text';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import {
@@ -16,31 +19,24 @@ import {
 } from '@/lib/experiences';
 import { IncomingExperienceInvitation } from '@/types/experience';
 
-const EDGES: Edge[] = ['top', 'left', 'right'];
+const EDGES = TAB_SAFE_AREA_EDGES;
 
 export default function ExperienceInvitationsScreen() {
   const { t, locale } = useI18n();
   const colors = useTheme();
 
   const [invitations, setInvitations] = useState<IncomingExperienceInvitation[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
 
   const loadInvitations = useCallback(async () => {
-    setLoading(true);
     setError(false);
     const { data, error: loadError } = await listIncomingExperienceInvitations();
     setInvitations(data);
     setError(loadError);
-    setLoading(false);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadInvitations();
-    }, [loadInvitations]),
-  );
+  const { initialLoading, refresh } = useFocusRefresh(loadInvitations);
 
   async function runAccept(invitation: IncomingExperienceInvitation) {
     setActionId(invitation.invitation_id);
@@ -57,16 +53,17 @@ export default function ExperienceInvitationsScreen() {
     setActionId(invitation.invitation_id);
     await declineExperienceInvitation(invitation.invitation_id);
     setActionId(null);
-    await loadInvitations();
+    await refresh();
   }
 
-  const showEmpty = !loading && !error && invitations.length === 0;
+  const showEmpty = !initialLoading && !error && invitations.length === 0;
 
   return (
-    <SafeAreaView edges={EDGES} style={[styles.safe, { backgroundColor: colors.background }]}>
+    <InsetView edges={EDGES} style={{ backgroundColor: colors.background }}>
       <FlatList
         data={invitations}
         keyExtractor={(item) => item.invitation_id}
+        {...DISABLE_SCROLL_INSET_ADJUSTMENT}
         renderItem={({ item }) => (
           <IncomingExperienceInvitationRow
             invitation={item}
@@ -100,16 +97,12 @@ export default function ExperienceInvitationsScreen() {
               {t('experiences.invites.screenSubtitle')}
             </Text>
 
-            {loading && (
-              <View style={styles.centeredRow}>
-                <ActivityIndicator color={colors.brand} />
-              </View>
-            )}
+            <ListLoadingSlot active={initialLoading && invitations.length === 0} />
 
-            {!loading && error && (
+            {!initialLoading && error && (
               <View style={styles.stateBlock}>
                 <Text variant="error">{t('experiences.invites.loadError')}</Text>
-                <Button label={t('error.retry')} onPress={loadInvitations} />
+                <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
               </View>
             )}
           </>
@@ -122,30 +115,24 @@ export default function ExperienceInvitationsScreen() {
           ) : null
         }
       />
-    </SafeAreaView>
+    </InsetView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   content: {
-    flexGrow: 1,
     padding: Spacing.lg,
     paddingBottom: Spacing.xl,
   },
   backButton: {
     alignSelf: 'flex-start',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   title: {
     marginBottom: Spacing.xs,
   },
   subtitle: {
-    marginBottom: Spacing.lg,
-  },
-  centeredRow: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
+    marginBottom: Spacing.md,
   },
   stateBlock: {
     gap: Spacing.md,

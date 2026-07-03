@@ -23,10 +23,20 @@ export function getNavigationTheme(scheme: 'light' | 'dark' | null | undefined):
   };
 }
 
-/** Shared Stack options — keeps navigator surfaces on the themed background. */
+/** Root stack — no transition when swapping auth groups on cold launch. */
+export function getRootStackScreenOptions(backgroundColor: string) {
+  return {
+    headerShown: false,
+    contentStyle: { backgroundColor },
+    animation: 'none' as const,
+  };
+}
+
+/** Nested stack screens inside tabs. */
 export function getStackScreenOptions(backgroundColor: string) {
   return {
     headerShown: false,
     contentStyle: { backgroundColor },
-  } as const;
+    animation: 'slide_from_right' as const,
+  };
 }

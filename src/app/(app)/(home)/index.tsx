@@ -1,20 +1,23 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { ExperienceListRow } from '@/components/ExperienceListRow';
+import { InsetView } from '@/components/InsetView';
+import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { Text } from '@/components/Text';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { listMyHomeExperiences, listIncomingExperienceInvitations, purgeMyStaleExperiences } from '@/lib/experiences';
 import { transformMyDueExperiences } from '@/lib/memories';
 import { ExperienceListItem } from '@/types/experience';
 
-const EDGES: Edge[] = ['top', 'left', 'right'];
+const EDGES = TAB_SAFE_AREA_EDGES;
 
 export default function HomeScreen() {
   const { session } = useAuth();
@@ -23,11 +26,9 @@ export default function HomeScreen() {
 
   const [experiences, setExperiences] = useState<ExperienceListItem[]>([]);
   const [invitationCount, setInvitationCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const loadExperiences = useCallback(async () => {
-    setLoading(true);
     setError(false);
 
     await transformMyDueExperiences();
@@ -40,26 +41,23 @@ export default function HomeScreen() {
     setExperiences(experiencesResult.data);
     setInvitationCount(invitationsResult.error ? 0 : invitationsResult.data.length);
     setError(experiencesResult.error || invitationsResult.error);
-    setLoading(false);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadExperiences();
-    }, [loadExperiences]),
-  );
+  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadExperiences);
 
   useEffect(() => {
+    resetLoaded();
     setExperiences([]);
-    setLoading(true);
+    setInvitationCount(0);
     setError(false);
-  }, [session?.user.id]);
+  }, [session?.user.id, resetLoaded]);
 
   return (
-    <SafeAreaView edges={EDGES} style={[styles.safe, { backgroundColor: colors.background }]}>
+    <InsetView edges={EDGES} style={{ backgroundColor: colors.background }}>
       <FlatList
         data={experiences}
         keyExtractor={(item) => item.id}
+        {...DISABLE_SCROLL_INSET_ADJUSTMENT}
         renderItem={({ item }) => (
           <ExperienceListRow
             item={item}
@@ -77,7 +75,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         ListHeaderComponent={
-          <>
+          <View>
             <Text variant="title" style={styles.title}>
               {t('home.plansTitle')}
             </Text>
@@ -91,31 +89,27 @@ export default function HomeScreen() {
               style={styles.newButton}
             />
 
-            {invitationCount > 0 ? (
-              <Button
-                label={t('home.invitationsWithCount', { count: String(invitationCount) })}
-                variant="secondary"
-                onPress={() => router.push('/(app)/(home)/invitations')}
-                style={styles.invitationsButton}
-              />
-            ) : null}
-
-            {loading && (
-              <View style={styles.centeredRow}>
-                <ActivityIndicator color={colors.brand} />
-              </View>
-            )}
-
-            {!loading && error && (
+            <View style={styles.invitationsSlot}>
+              {invitationCount > 0 ? (
+                <Button
+                  label={t('home.invitationsWithCount', { count: String(invitationCount) })}
+                  variant="secondary"
+                  onPress={() => router.push('/(app)/(home)/invitations')}
+                />
+              ) : null}
+            </View>
+            {!initialLoading && error ? (
               <View style={styles.stateBlock}>
                 <Text variant="error">{t('home.loadError')}</Text>
-                <Button label={t('error.retry')} onPress={loadExperiences} />
+                <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
               </View>
-            )}
-          </>
+            ) : null}
+          </View>
         }
         ListEmptyComponent={
-          !loading && !error ? (
+          initialLoading && experiences.length === 0 ? (
+            <ListLoadingSlot active />
+          ) : !initialLoading && !error ? (
             <View style={styles.emptyBlock}>
               <Text variant="subtitle" style={styles.empty}>
                 {t('home.empty')}
@@ -127,14 +121,12 @@ export default function HomeScreen() {
           ) : null
         }
       />
-    </SafeAreaView>
+    </InsetView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   content: {
-    flexGrow: 1,
     padding: Spacing.lg,
   },
   title: {
@@ -146,12 +138,10 @@ const styles = StyleSheet.create({
   newButton: {
     marginBottom: Spacing.lg,
   },
-  invitationsButton: {
+  invitationsSlot: {
+    minHeight: 48,
     marginBottom: Spacing.lg,
-  },
-  centeredRow: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
+    justifyContent: 'center',
   },
   stateBlock: {
     gap: Spacing.md,

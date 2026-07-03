@@ -1,18 +1,21 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { InsetView } from '@/components/InsetView';
 
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
+import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { MemoryListRow } from '@/components/MemoryListRow';
 import { Text } from '@/components/Text';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { listMyMemories, transformMyDueExperiences } from '@/lib/memories';
 
-const EDGES: Edge[] = ['top', 'left', 'right'];
+const EDGES = TAB_SAFE_AREA_EDGES;
 
 export default function MemoriesScreen() {
   const { t, locale } = useI18n();
@@ -21,36 +24,30 @@ export default function MemoriesScreen() {
   const [memories, setMemories] = useState<Awaited<ReturnType<typeof listMyMemories>>['data']>(
     [],
   );
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [search, setSearch] = useState('');
 
   const loadMemories = useCallback(async () => {
-    setLoading(true);
     setError(false);
     await transformMyDueExperiences();
     const { data, error: loadError } = await listMyMemories(search);
     setMemories(data);
     setError(loadError);
-    setLoading(false);
   }, [search]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadMemories();
-    }, [loadMemories]),
-  );
+  const { initialLoading, refresh } = useFocusRefresh(loadMemories);
 
   const showEmpty = useMemo(
-    () => !loading && !error && memories.length === 0,
-    [loading, error, memories.length],
+    () => !initialLoading && !error && memories.length === 0,
+    [initialLoading, error, memories.length],
   );
 
   return (
-    <SafeAreaView edges={EDGES} style={[styles.safe, { backgroundColor: colors.background }]}>
+    <InsetView edges={EDGES} style={{ backgroundColor: colors.background }}>
       <FlatList
         data={memories}
         keyExtractor={(item) => item.id}
+        {...DISABLE_SCROLL_INSET_ADJUSTMENT}
         renderItem={({ item }) => (
           <MemoryListRow
             item={item}
@@ -85,27 +82,17 @@ export default function MemoriesScreen() {
               value={search}
               onChangeText={setSearch}
               placeholder={t('memories.searchPlaceholder')}
-              onSubmitEditing={() => void loadMemories()}
+              onSubmitEditing={() => void refresh()}
               returnKeyType="search"
               style={styles.search}
             />
-            <Button
-              label={t('memories.search')}
-              variant="secondary"
-              onPress={() => void loadMemories()}
-              style={styles.searchButton}
-            />
 
-            {loading && (
-              <View style={styles.centeredRow}>
-                <ActivityIndicator color={colors.brand} />
-              </View>
-            )}
+            <ListLoadingSlot active={initialLoading && memories.length === 0} />
 
-            {!loading && error && (
+            {!initialLoading && error && (
               <View style={styles.stateBlock}>
                 <Text variant="error">{t('memories.loadError')}</Text>
-                <Button label={t('error.retry')} onPress={loadMemories} />
+                <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
               </View>
             )}
           </>
@@ -120,42 +107,34 @@ export default function MemoriesScreen() {
           ) : null
         }
       />
-    </SafeAreaView>
+    </InsetView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   content: {
-    flexGrow: 1,
     padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
   backButton: {
     alignSelf: 'flex-start',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   title: {
     marginBottom: Spacing.xs,
   },
   subtitle: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   search: {
-    marginBottom: Spacing.sm,
-  },
-  searchButton: {
-    marginBottom: Spacing.lg,
-  },
-  centeredRow: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
+    marginBottom: Spacing.md,
   },
   stateBlock: {
     gap: Spacing.md,
     alignItems: 'center',
   },
   emptyBlock: {
-    marginTop: Spacing.xl,
+    marginTop: Spacing.lg,
   },
   empty: {
     textAlign: 'center',

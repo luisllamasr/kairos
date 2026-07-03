@@ -1,50 +1,47 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { InsetView } from '@/components/InsetView';
 
 import { Button } from '@/components/Button';
+import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { Text } from '@/components/Text';
 import { UserSearchResult } from '@/components/UserSearchResult';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
+import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { listFriends } from '@/lib/friendships';
 import { PublicProfile } from '@/types/public-profile';
 
-const EDGES: Edge[] = ['top', 'left', 'right'];
+const EDGES = TAB_SAFE_AREA_EDGES;
 
 export default function FriendsScreen() {
   const { t } = useI18n();
   const colors = useTheme();
 
   const [friends, setFriends] = useState<PublicProfile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const loadFriends = useCallback(async () => {
-    setLoading(true);
     setError(false);
 
     const { data, error: loadError } = await listFriends();
     setFriends(data);
     setError(loadError);
-    setLoading(false);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadFriends();
-    }, [loadFriends]),
-  );
+  const { initialLoading, refresh } = useFocusRefresh(loadFriends);
 
-  const showEmpty = !loading && !error && friends.length === 0;
+  const showEmpty = !initialLoading && !error && friends.length === 0;
 
   return (
-    <SafeAreaView edges={EDGES} style={[styles.safe, { backgroundColor: colors.background }]}>
+    <InsetView edges={EDGES} style={{ backgroundColor: colors.background }}>
       <FlatList
         data={friends}
         keyExtractor={(item) => item.username}
+        {...DISABLE_SCROLL_INSET_ADJUSTMENT}
         renderItem={({ item }) => (
           <UserSearchResult
             profile={item}
@@ -74,18 +71,14 @@ export default function FriendsScreen() {
               {t('friends.subtitle')}
             </Text>
 
-            {loading && (
-              <View style={styles.centeredRow}>
-                <ActivityIndicator color={colors.brand} />
-              </View>
-            )}
+            <ListLoadingSlot active={initialLoading && friends.length === 0} />
 
-            {!loading && error && (
+            {!initialLoading && error && (
               <View style={styles.stateBlock}>
                 <Text variant="error" style={styles.message}>
                   {t('friends.error')}
                 </Text>
-                <Button label={t('error.retry')} onPress={loadFriends} />
+                <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
               </View>
             )}
           </>
@@ -98,29 +91,23 @@ export default function FriendsScreen() {
           ) : null
         }
       />
-    </SafeAreaView>
+    </InsetView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   content: {
-    flexGrow: 1,
     padding: Spacing.lg,
   },
   backButton: {
     alignSelf: 'flex-start',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   title: {
     marginBottom: Spacing.xs,
   },
   subtitle: {
-    marginBottom: Spacing.lg,
-  },
-  centeredRow: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
+    marginBottom: Spacing.md,
   },
   stateBlock: {
     gap: Spacing.md,

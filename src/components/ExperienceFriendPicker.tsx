@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
+import { DISABLE_SCROLL_INSET_ADJUSTMENT } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
@@ -79,7 +80,11 @@ export function ExperienceFriendPicker({
   }
 
   if (loading) {
-    return <ActivityIndicator color={colors.brand} style={styles.loader} />;
+    return (
+      <View style={styles.loadingSlot}>
+        <ActivityIndicator color={colors.brand} />
+      </View>
+    );
   }
 
   if (error) {
@@ -107,7 +112,12 @@ export function ExperienceFriendPicker({
   }
 
   return (
-    <ScrollView style={styles.list} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.list}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+      {...DISABLE_SCROLL_INSET_ADJUSTMENT}
+    >
       {visibleFriends.map((friend) => {
         const userId = friend.user_id;
         if (!userId) return null;
@@ -147,9 +157,10 @@ export function ExperienceFriendPicker({
 }
 
 const styles = StyleSheet.create({
-  loader: {
-    marginVertical: Spacing.md,
-    alignSelf: 'center',
+  loadingSlot: {
+    minHeight: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   message: {
     marginVertical: Spacing.sm,

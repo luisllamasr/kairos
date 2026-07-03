@@ -1,4 +1,5 @@
-import { Redirect } from 'expo-router';
+import { router, type Href } from 'expo-router';
+import { useLayoutEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { BootstrapScreen } from '@/components/BootstrapScreen';
@@ -10,15 +11,39 @@ import { useAuth } from '@/context/auth-context';
 import { useI18n } from '@/i18n';
 
 export default function RootIndex() {
-  const { session, profile, profileError, loading, refreshProfile } = useAuth();
+  const { session, profile, profileError, loading, profileLoading, refreshProfile } = useAuth();
   const { t } = useI18n();
+  const routedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (loading || routedRef.current) return;
+
+    let href: Href | null = null;
+
+    if (!session) {
+      href = '/(auth)/sign-in';
+    } else if (profileError) {
+      return;
+    } else if (profileLoading && !profile) {
+      return;
+    } else if (!profile?.username) {
+      href = '/(onboarding)';
+    } else {
+      href = '/(app)/(home)';
+    }
+
+    if (href) {
+      routedRef.current = true;
+      router.replace(href);
+    }
+  }, [loading, session, profile, profileError, profileLoading]);
 
   if (loading) return <BootstrapScreen />;
 
-  if (!session) return <Redirect href="/(auth)/sign-in" />;
+  if (!session) return <BootstrapScreen />;
 
-  // Profile fetch failed (network error, unexpected DB issue).
-  // Show a retry screen instead of routing to onboarding — the user may have a complete profile.
+  if (profileLoading && !profile) return <BootstrapScreen />;
+
   if (profileError) {
     return (
       <Screen centered>
@@ -30,8 +55,10 @@ export default function RootIndex() {
     );
   }
 
-  if (!profile?.username) return <Redirect href="/(onboarding)" />;
-  return <Redirect href="/(app)/(home)" />;
+  if (!profile?.username) return <BootstrapScreen />;
+
+  // Keep bootstrap visible until router.replace hands off to (app).
+  return <BootstrapScreen />;
 }
 
 const styles = StyleSheet.create({
