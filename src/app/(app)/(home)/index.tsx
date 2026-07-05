@@ -133,15 +133,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   subtitle: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   newButton: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   invitationsSlot: {
-    minHeight: 48,
-    marginBottom: Spacing.lg,
-    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
   stateBlock: {
     gap: Spacing.md,

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -10,7 +10,7 @@ import { ExperienceParticipantActionsMenu } from '@/components/ExperiencePartici
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT } from '@/constants/layout';
-import { Spacing } from '@/constants/theme';
+import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useTheme } from '@/hooks/use-theme';
@@ -38,6 +38,7 @@ import { ensureExperienceTransformed } from '@/lib/memories';
 import { getAvatarPublicUrl } from '@/lib/profile';
 import {
   canCancelExperience,
+  canAccessExperienceChat,
   canEditExperience,
   canLeaveExperienceNow,
   canManageExperienceParticipants,
@@ -161,6 +162,7 @@ export default function ExperienceDetailScreen() {
   const invitesOpen = experience ? upcoming && hasActiveExperienceLeader(experience) : false;
   const pendingInvitee = experience ? isPendingExperienceInvitee(experience) : false;
   const isMember = experience?.am_participant ?? false;
+  const chatAccessible = experience ? canAccessExperienceChat(experience) : false;
 
   function participantLabel(participant: ExperienceParticipant): string {
     return experienceParticipantDisplayName(participant, t('experiences.participants.unknown'));
@@ -526,6 +528,35 @@ export default function ExperienceDetailScreen() {
             </View>
           ) : null}
 
+          {isMember && chatAccessible ? (
+            <View style={styles.section}>
+              <Text variant="title" style={styles.sectionTitle}>
+                {t('experiences.chat.sectionTitle')}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/(home)/[id]/chat',
+                    params: { id: contentExperience.id },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.chatSectionCard,
+                  { borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <View style={styles.chatSectionText}>
+                  <Text variant="body">{t('experiences.chat.sectionLead')}</Text>
+                  <Text variant="caption">{t('experiences.chat.sectionHint')}</Text>
+                </View>
+                <Text variant="subtitle" style={styles.chatSectionChevron}>
+                  ›
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {manageable && pendingInvitations.length > 0 ? (
             <View style={styles.section}>
               <Text variant="title" style={styles.sectionTitle}>
@@ -799,6 +830,23 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: Spacing.xs,
+  },
+  chatSectionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  chatSectionText: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  chatSectionChevron: {
+    fontSize: FontSize.xl,
+    lineHeight: FontSize.xl,
   },
   participantRow: {
     flexDirection: 'row',

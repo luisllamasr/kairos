@@ -45,6 +45,14 @@ Pre-M13 chain is unchanged (`170000` profiles → `241100` experiences).
 | `261610` | `membership_helper_hardening.sql` | Split helper overloads; revoke two-arg from clients (close probe) |
 | `261620` | `read_rpc_invoker_alignment.sql` | Memory read RPCs + `mark_notification_read` → SECURITY INVOKER (pre-M15 security review) |
 
+## M15 experience chat chain
+
+| Version | File | Purpose |
+|---------|------|---------|
+| `271000` | `experience_chat_schema.sql` | `chat_policy`, messages + reactions tables, RLS, Realtime publication, `experience_user_can` helper |
+| `271100` | `experience_chat_rpcs.sql` | Chat read/write RPCs, `get_experience` chat flags; edit RPCs refactored to `experience_user_can` |
+| `271101` | `send_experience_message_lint_fix.sql` | Remove unused `v_exp_id` in `send_experience_message` (db lint) |
+
 Security model: `docs/SECURITY.md`.
 
 ## Storage lifecycle

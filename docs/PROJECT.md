@@ -151,7 +151,7 @@ Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
 # Current status
 
 Phase:
-Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, and **M14 shared experiences** complete — including notification retention and list/detail UX polish.
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, and **M14 shared experiences** complete — including notification retention and list/detail UX polish. **M15 Experience chat** — product philosophy locked; implementation next.
 
 Created by:
 Luis Llamas Ramón
@@ -213,7 +213,7 @@ Minimal graph-building before shared experiences. Purpose: **search → view pro
 
 When milestones 10 and 11 are done, **stop expanding the social layer** unless a core-domain feature requires it.
 
-## Phase C — Core domain (in progress)
+## Phase C — Core domain (M15 next)
 
 Build **Create → Live → Remember** in order. Full milestone breakdown and product rules live in **Create → Live → Remember** below.
 
@@ -223,7 +223,7 @@ Build **Create → Live → Remember** in order. Full milestone breakdown and pr
 | **13. Memories** ✓ | Shared memory core + personal layer; automatic transform; timeline |
 | **13.5 Cleanup** ✓ | Photo delete, migration squash, storage lifecycle, security audit |
 | **14. Shared experiences** ✓ | Invites, suggest flow, group transform, notifications foundation + inbox retention |
-| **15. Experience chat** | Purpose-bound coordination; not DMs |
+| **15. Experience chat** | Experience-scoped coordination; Realtime; ephemeral (CASCADE with experience); `chat_policy`; not DMs or memory chat |
 | **16. Public experiences** | Discoverable plans; open join |
 | **17. Join approval** | Request → approve/decline |
 | **18. Opportunities** | Catalog → “Plan this” → experience |
@@ -293,7 +293,7 @@ When `transform_at` passes, the experience **transforms** into memory in one tra
 ```text
 INSERT memories (shared core + leader + policies from experience)
 INSERT memory_participants (one row per accepted experience participant)
-DELETE experience (+ CASCADE invitations, participants)
+DELETE experience (+ CASCADE invitations, participants, chat messages)
 ```
 
 Memory is the **only** long-term source of truth for that moment.
@@ -431,7 +431,17 @@ On create (M12/M14): `organizer_id := created_by`. Creator is always the first a
 
 RLS and RPCs should check **`organizer_id`** on experiences and **`leader_id` + policies** on memories for management actions — not `created_by`.
 
-**Edit policies (M14 experiences, M13 memories):** Each entity stores `edit_info_policy`: `all_participants` \| `leader_only`. Applies to shared **content** (title, description, location) — not lifecycle actions (cancel, delete, invite, remove participant, leadership transfer).
+**Leader-controlled policies (M14+ experiences, M13 memories):** Reuse enum `memory_permission_policy`: `all_participants` \| `leader_only`.
+
+| Column | Entity | Governs |
+|--------|--------|---------|
+| `edit_info_policy` | experiences, memories | Shared title, description, location |
+| `add_media_policy` | memories | Adding photos to shared gallery |
+| `chat_policy` | experiences (M15) | Sending chat messages |
+
+Does **not** govern lifecycle actions (cancel, delete, invite, remove participant, leadership transfer) or reading chat (participants always read while the experience row exists).
+
+SQL checks these via a shared internal helper (e.g. `experience_user_can(experience_id, capability)`) — start with `edit_info` and `chat_write`; grow as new leader permissions arrive.
 
 ---
 
@@ -672,6 +682,8 @@ Audit every relationship. **Do not blindly CASCADE profile references on shared 
 
 **M14 child tables:** `experience_participants`, `experience_invitations`, `experience_invite_suggestions`, `experience_invite_declines` — CASCADE from `experiences(id)`.
 
+**M15 child tables:** `experience_messages`, `experience_message_reactions` — CASCADE from `experiences(id)` (and messages → reactions).
+
 Entity delete = `DELETE experiences` row (leader delete, last participant leave, transform, or purge cron).
 
 #### `experience_participants` (M14)
@@ -715,7 +727,7 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 |----------------|------------------------|--------------------|
 | `memories` | `memory_participants`, `memory_media` (DB) + `memories/{memory_id}/` Storage (pg_net → `cleanup-memory-storage`) | — |
 | `memories` (manual admin delete) | Same — CASCADE + Storage cleanup trigger | — |
-| `experiences` | `experience_participants`, invitations, suggestions (M14) | Memory rows (separate lifecycle) |
+| `experiences` | `experience_participants`, invitations, suggestions, declines (M14); **chat messages + reactions (M15)** | Memory rows (separate lifecycle); notification rows (entity purge rules) |
 | `profiles` | `friendships`, `experiences` (M12) | Memory rows (tombstone + purge rules) |
 
 **Leave memory (not delete):** `leave_memory` RPC sets `left_at`; participant row **kept** for shared history. Leader must transfer when required. `purge_memory_if_orphaned` runs when no active participants remain.
@@ -806,11 +818,29 @@ This matches: *leave your copy of the past without erasing it for others; delete
 
 ---
 
-## Experience chat and messaging (future)
+## Experience chat (M15 — locked)
 
-**Experience chat (M15):** scoped to one experience, participants only — not DMs. Purged with the experience; not copied to memory.
+Purpose-bound **coordination** attached to one experience — not DMs, not a global inbox, **never** copied to memory.
 
-**DMs (later, purpose-bound):** Kairos is not an open inbox. Possible gates: mutual friends, co-participants on a memory or experience, public join context. Not Instagram-style “message anyone.” Architecture should not block this; do not build in M13.
+| Rule | Detail |
+|------|--------|
+| **Who** | **Accepted participants only** — must have an `experience_participants` row. Pending invitees, applicants, and non-participants cannot read or write. |
+| **Solo plans** | Chat always available (notes, simpler architecture; future invites reuse the same thread). |
+| **Lifetime** | Writable while the **`experiences` row exists** — including **cancelled** plans until purge. Revive continues the same thread. Gone only on permanent experience DELETE (transform, purge, delete, last-participant purge). |
+| **Memory** | No chat tables, routes, or archive on memories. |
+| **Permissions** | `chat_policy` on `experiences` (`memory_permission_policy` enum); `set_experience_chat_policy` RPC; shared SQL helper `experience_user_can(...)`. |
+| **Writes** | RPC-only (SECURITY DEFINER). Reads: INVOKER RPCs + RLS SELECT. |
+| **Realtime** | Required in M15 (Supabase Realtime on messages/reactions). |
+| **Messages** | Send + **hard-delete own** only — **no edit** in M15. Deleted accounts → author `NULL`; UI **“Deleted user”**. |
+| **Reactions** | Lightweight WhatsApp-style; fixed emoji allowlist; one reaction per user per message. |
+| **Entry** | Experience detail → `(home)/[id]/chat` — no global Chat tab. |
+| **Notifications** | Defer inbox/push for chat to **M19** (optional in-app unread in M15). |
+
+**Future contextual conversations (M16/M17):** Leader ↔ applicant threads for public join requests — **not** experience chat, **not** permanent DMs. Same permission family; separate feature when join approval ships.
+
+Full specification: **Milestone 15 — locked architecture** below.
+
+**Permanent open DMs:** Still out of scope. Purpose-bound contextual threads only.
 
 ---
 
@@ -829,7 +859,267 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Milestone 15 — Experience chat** — next after M14 completion (retention + UX polish).
+**Milestone 15 — Experience chat** — product philosophy locked below; implementation next (schema → RPCs → UI + Realtime).
+
+---
+
+# Milestone 15 — locked architecture (approved)
+
+Do not implement outside this model without updating this section first.
+
+## Goal
+
+Add **experience-scoped chat** for coordination before and during a plan — ephemeral, participant-only, Realtime-backed. Not a messaging product, not memory chat, not DMs.
+
+Examples: *“I'm arriving in 10 minutes.”*, *“Bring ice.”*, *“We've changed the meeting point.”*
+
+## Product philosophy (locked)
+
+| Principle | Rule |
+|-----------|------|
+| **Attached to experience** | One chat thread per experience row. |
+| **Coordination, not archive** | Chat supports planning and live coordination — not long-term history. |
+| **Ephemeral** | When the experience is permanently deleted, chat is **gone** — no read-only archive, no copy into memory. |
+| **Memory is separate** | Transform copies shared core + participants + policies into memory — **never** chat messages. |
+| **No global inbox** | No Chat tab; entry only from experience detail. |
+| **No memory chat** | Memories stay photos + shared info + personal notes — not group messaging. |
+| **No open DMs** | User-to-user inbox remains out of scope. |
+
+## Access (locked)
+
+| Actor | Chat access |
+|-------|-------------|
+| **Accepted participant** | Read while experience row exists; write per `chat_policy` (see below). |
+| **Organizer (leader)** | Same read rules; always can write when `chat_policy = leader_only`; can change `chat_policy`. |
+| **Pending invitee** | **No access** — not in `experience_participants`. |
+| **Future join applicant (M16/M17)** | **No access** until accepted — leader↔applicant coordination is a **future contextual thread**, not this chat. |
+| **Former participant** | **No access** after leave or leader remove (`DELETE` participant row). |
+| **Non-participant** | No access — RLS + RPC guards. |
+
+**Solo experiences:** Chat is **always available** to the solo organizer/participant — same tables and routes as group plans.
+
+## Lifecycle vs write access (locked)
+
+Chat write/read access is tied to **experience row existence**, not to `status = planned` alone.
+
+| Experience state | Chat |
+|------------------|------|
+| **Planned** (before/during/after `starts_at`, until transform DELETE) | Full read + write (per policy) |
+| **Cancelled** (row exists, `purge_at > now()`) | **Fully writable** — post-cancel coordination; revive reuses same thread |
+| **Revived** | Same message history continues |
+| **Transform → memory** | Experience DELETE → CASCADE removes all messages |
+| **Purge / delete / last-participant purge** | CASCADE removes all messages |
+
+Do **not** gate chat on `isExperienceUpcoming()` — that helper applies to **edit_info**, not chat.
+
+### Transform vs send race (locked)
+
+Both `transform_experience_to_memory` and `send_experience_message` (M15.2) operate on the same parent `experiences` row.
+
+**Transform (existing):** locks the row with `SELECT … FOR UPDATE` where `status = 'planned'` and `transform_at <= now()`, then inserts memory and `DELETE`s the experience (CASCADE removes chat).
+
+**Send (M15.2):** must lock the same parent row (`SELECT … FOR UPDATE`) before inserting a message. PostgreSQL serializes the two transactions — no special-case schema required.
+
+| Ordering | Result |
+|----------|--------|
+| **Transform first** | Experience deleted; send waits then fails (`not found`). No message inserted. |
+| **Send first** | Message commits; transform then runs and `DELETE`s experience → CASCADE removes the message. Message is **not** copied to memory. |
+| **Send at 20:59:59, transform at 21:00:00** | Not a race — `transform_at` has not passed yet; send succeeds. Message lives until transform runs, then CASCADE removes it. Normal ephemeral lifecycle. |
+
+**Why this is safe and consistent:**
+
+- Chat is coordination for the **experience phase** only — nothing in chat survives transform by design.
+- CASCADE guarantees no orphaned messages if the experience row is gone.
+- Row locks prevent send from targeting a row mid-delete without a clear outcome.
+- The “send wins then CASCADE” case may briefly show a message in Realtime before it disappears; that matches ephemeral chat, not data loss in memory.
+
+**Client (M15.3):** when transform completes, leave chat / redirect to memory detail; treat post-transform send errors as expected.
+
+## Permission model (locked)
+
+Extend the same pattern as `edit_info_policy` / `add_media_policy`:
+
+```text
+experiences.chat_policy  memory_permission_policy NOT NULL DEFAULT 'all_participants'
+```
+
+| Policy | Send messages | Read messages | Reactions |
+|--------|---------------|---------------|-----------|
+| `all_participants` | Any accepted participant | Any accepted participant | Any accepted participant |
+| `leader_only` | **`organizer_id` only** | Any accepted participant | Any accepted participant |
+
+**Leader RPC:** `set_experience_chat_policy(p_experience_id, p_policy)` — mirror `set_experience_edit_policy`; leader only; experience row must exist.
+
+**Shared SQL helper (internal):** `experience_user_can(p_experience_id uuid, p_capability text)` — STABLE SECURITY DEFINER; two-arg overload granted to `authenticated` (caller only). Three-arg `(…, p_user_id)` is internal — write RPCs only. M15 capabilities:
+
+| Capability | Rule |
+|------------|------|
+| `edit_info` | Participant; `planned` + `transform_at > now()`; `edit_info_policy` |
+| `set_edit_policy` | Organizer; `planned` or `cancelled` |
+| `chat_read` | Participant; `planned` or `cancelled` |
+| `chat_write` | Participant; `planned` or `cancelled`; `chat_policy` |
+| `chat_react` | Participant; `planned` or `cancelled` |
+| `set_chat_policy` | Organizer; `planned` or `cancelled` |
+
+**Capability semantics (naming):** `chat_read`, `chat_write`, and `chat_react` are a consistent set. In the helper, `chat_read` means **chat is open for this participant** (membership + chat-eligible lifecycle) — the floor for read, react, and delete-own. It is not “may read this specific message.” **`delete_experience_message`** uses `chat_read` + an **author check in the RPC** (not `chat_write`, so participants in `leader_only` threads can still remove their own messages). Future moderation would add an explicit capability (e.g. `chat_moderate`), not an overload of `chat_read`.
+
+All experience RPCs that check permissions must delegate here — no duplicated organizer/participant/policy logic.
+
+**Client mirror:** `canSendExperienceChat(experience)` alongside existing `canEditExperience()` in `src/types/experience.ts`.
+
+Default for new experiences: `all_participants`.
+
+## Data model (conceptual)
+
+```text
+experiences
+  + chat_policy  (all_participants | leader_only)   — M15 migration
+
+experience_messages
+  id, experience_id → experiences(id) ON DELETE CASCADE
+  author_id → profiles(id) ON DELETE SET NULL
+  body TEXT NOT NULL                    — max 2000 chars (align with description)
+  created_at timestamptz NOT NULL DEFAULT now()
+  — no updated_at; no edit in M15
+
+experience_message_reactions
+  message_id → experience_messages(id) ON DELETE CASCADE
+  user_id → profiles(id) ON DELETE CASCADE
+  emoji TEXT NOT NULL                   — fixed allowlist only (RPC-enforced)
+  created_at timestamptz NOT NULL DEFAULT now()
+  UNIQUE (message_id, user_id)          — one reaction per user per message; toggle replaces emoji
+```
+
+**Realtime publication:** Add `experience_messages` and `experience_message_reactions` to Supabase Realtime (participant-scoped RLS on SELECT).
+
+**Account delete:** `author_id` SET NULL on messages; message rows remain until experience DELETE. UI shows **“Deleted user”** (same pattern as memory photos).
+
+## Reactions (locked)
+
+- Fixed allowlist only (WhatsApp-style six): `👍` `❤️` `😂` `😮` `😢` `🙏` — enforce in RPC, not free text.
+- One row per `(message_id, user_id)` — toggling changes emoji or removes reaction.
+- Any **accepted participant** may react (not gated by `chat_policy`).
+- Realtime events on reaction insert/update/delete.
+
+## Security architecture (locked)
+
+| Path | Pattern |
+|------|---------|
+| **Send / delete own message / set reaction** | SECURITY DEFINER RPCs — no direct INSERT/UPDATE/DELETE grants on chat tables for `authenticated` |
+| **List messages / list reactions** | SECURITY INVOKER read RPCs or direct SELECT where RLS suffices |
+| **RLS SELECT** | Caller must be active accepted participant on parent `experience_id` |
+| **RLS writes** | Deny direct table writes for `authenticated` — RPC-only |
+
+Reuse one-arg membership helpers (`user_is_experience_participant(experience_id)`) in RLS policies — same family as M14.
+
+## RPC inventory (M15 — implemented in `271100`)
+
+**Reads (INVOKER + RLS):**
+
+- `list_experience_messages(p_experience_id, p_before, p_limit)` — paginated; reactions embedded as `jsonb`
+
+**Reads (extended):**
+
+- `get_experience` — adds `chat_policy`, `can_send_chat`, `can_react_chat` (via two-arg `experience_user_can`)
+
+**Writes (SECURITY DEFINER — all delegate to `experience_user_can`):**
+
+- `send_experience_message(p_experience_id, p_body)` — `FOR UPDATE` parent + `chat_write`
+- `delete_experience_message(p_message_id)` — author only + `chat_read`
+- `set_experience_message_reaction(p_message_id, p_emoji)` — `chat_react`; NULL clears; same emoji toggles off
+- `set_experience_chat_policy(p_experience_id, p_policy)` — `set_chat_policy`
+
+**Refactored (M15.2):** `update_experience` → `edit_info`; `set_experience_edit_policy` → `set_edit_policy`
+
+**Internal (not client-granted):** `experience_user_can(uuid, text, uuid)` three-arg overload
+
+## UI & navigation (locked)
+
+| Area | M15 |
+|------|-----|
+| **Entry** | Experience detail screen → navigate to `(app)/(home)/[id]/chat` — **only when `am_participant`** (pending invitees may view detail per M14 but must not see chat entry) |
+| **Global Chat tab** | **Out** |
+| **Memory detail** | **No chat** |
+| **Leader settings** | `chat_policy` control — may ship minimal or slip to M15.5 |
+| **Unread badge** | Optional on detail entry; full notification UX in M19 |
+
+Composer hidden when user cannot send (`leader_only` + not leader). Read-only participants still see history and can react.
+
+## Notifications (deferred)
+
+M14 `notifications` table may gain chat event types in a later pass — **M19** ships inbox UI, badges, and push. M15 may track local/optional unread on detail only.
+
+## Future: contextual conversations (M16/M17 — document only)
+
+Public experiences and join approval will need **leader ↔ applicant** threads — scoped to a join request, not the experience participant chat.
+
+| | Experience chat (M15) | Join-request chat (M16/M17) |
+|--|----------------------|-----------------------------|
+| **Purpose** | Coordinate among accepted participants | Discuss admission before accept |
+| **Access** | `experience_participants` only | Leader + applicant on a specific request |
+| **Lifetime** | CASCADE with experience | CASCADE with request resolution |
+| **Built in M15?** | Yes | **No** — optional schema hook (`context_kind` / threads table) documented here only |
+
+Do not implement join-request messaging in M15.
+
+## Explicitly out of M15
+
+- Message **editing**
+- Memory chat or chat export to memory
+- Global chat tab or user DMs
+- Chat notifications in inbox/push (M19)
+- Pending invitee or applicant access
+- Read-only chat archive after experience DELETE
+- Custom emoji / arbitrary reaction strings
+- Moderation tools beyond own-message delete
+- Join-request contextual threads (M16/M17)
+
+## Implementation order (recommended)
+
+1. **M15.1 — Schema:** `chat_policy`, `experience_messages`, `experience_message_reactions`, RLS, Realtime publication, `experience_user_can` skeleton
+2. **M15.2 — RPCs:** send, delete, list, reactions, `set_experience_chat_policy`; extend `get_experience`
+3. **M15.3 — Client:** chat screen, Realtime subscription, composer, reactions, deleted-user display
+4. **M15.4 — Entry:** detail → chat link; optional unread indicator
+5. **M15.5 — Leader UI:** `chat_policy` setting (may slip)
+
+## M15 validation checklist (run after push)
+
+**Access**
+
+- [ ] Only accepted participants can list/send; pending invitee gets RLS/RPC denial and no chat entry on detail
+- [ ] User who leaves or is removed loses access immediately
+- [ ] Solo plan: chat works with one participant
+
+**Lifecycle**
+
+- [ ] Chat writable on **cancelled** plan before `purge_at`
+- [ ] Revive preserves message history
+- [ ] Transform DELETE removes all messages (not in memory)
+- [ ] Leader delete / purge removes chat
+
+**Permissions**
+
+- [ ] `leader_only`: non-leaders read + react but cannot send
+- [ ] Leader can change `chat_policy` via RPC
+- [ ] `experience_user_can` used in send RPC (no duplicate ad-hoc checks)
+
+**Messages & reactions**
+
+- [ ] Body max 2000 enforced UI + RPC
+- [ ] Author can hard-delete own message only
+- [ ] No edit path in M15
+- [ ] Reactions: allowlist only; one per user per message; toggle works
+- [ ] Deleted account author shows “Deleted user”
+
+**Realtime**
+
+- [ ] New message appears for other participant without refresh
+- [ ] Reaction changes propagate live
+
+**Regression**
+
+- [ ] Experience detail, invites, transform, memories unchanged
+- [ ] No chat routes on memory screens
 
 ---
 
@@ -858,6 +1148,7 @@ This is intentional — do not unify into one participation pattern.
 ```text
 experiences
   + edit_info_policy  (all_participants | leader_only)
+  + chat_policy       (all_participants | leader_only)   — M15
   organizer_id, status, starts_at, ends_at, …  (existing)
 
 experience_participants
@@ -918,7 +1209,7 @@ Philosophy mirrors **friend requests**: pending state is temporary; declining do
 
 ## Edit permissions
 
-Same enum as memories: `edit_info_policy` on `experiences`.
+Same enum as memories: `edit_info_policy` on `experiences`. **`chat_policy`** (M15) is separate — see Milestone 15.
 
 - **`all_participants`:** any accepted participant may edit title, description, location (via RPC + optional `expected_updated_at`).
 - **`leader_only`:** only `organizer_id`.
@@ -956,7 +1247,7 @@ Extend existing transform RPC:
 1. Require `status = planned` and `transform_at <= now()`.
 2. Insert one `memory_participants` row per **accepted** experience participant; set `leader_id := organizer_id` at transform; copy `edit_info_policy`.
 3. Set `leader_id := organizer_id at transform`; copy `edit_info_policy`.
-4. `DELETE` experience (CASCADE invitations + participants).
+4. `DELETE` experience (CASCADE invitations, participants, and **M15:** chat messages).
 
 Cron `transform_due_experiences` unchanged in spirit — scans all due planned experiences.
 
@@ -1356,7 +1647,7 @@ Kairos prefers **controlled RPCs** with business rules in SQL over broad table w
 | Advisor item | Verdict | Notes |
 |--------------|---------|-------|
 | **SECURITY DEFINER** friendship RPCs | Expected — keep | Pair ordering, expiry, simultaneous-accept rules. Reads use INVOKER + RLS. |
-| **SECURITY DEFINER** experience / memory write RPCs | Expected — keep | Dates, leadership columns, edit policies, lifecycle rules. No direct table writes for `authenticated`. |
+| **SECURITY DEFINER** experience / memory write RPCs | Expected — keep | Dates, leadership columns, edit/chat policies, lifecycle rules. No direct table writes for `authenticated`. |
 | **SECURITY DEFINER** experience list read RPCs | Expected for now | Cross-role profile gating; deferred INVOKER migration. |
 | **SECURITY DEFINER** one-arg membership helpers | Expected — keep | RLS/Storage recursion break; caller-only (`261610`). |
 | **SECURITY DEFINER** triggers / cron | Expected — keep | Profile delete, storage cleanup, purge/transform jobs. |
@@ -1387,6 +1678,8 @@ When helping with Kairos:
 - **Leader** = admin, not owner; voluntary leave requires choosing successor when leader.
 - **Leave** sets `left_at` (preserves history for others); **account delete** tombstones user — no hidden archive.
 - Experiences transform to memories **automatically** at `transform_at` — no task-manager “complete” UX.
+- **Experience chat (M15):** participant-only, ephemeral (CASCADE with experience DELETE), not memory chat, not DMs — full rules in Milestone 15 section.
+- **`chat_policy`** + `experience_user_can(...)` — same permission family as `edit_info_policy`; chat writable while experience row exists (including cancelled-until-purge).
 - Do not blindly generate files.
 - Explain architectural decisions.
 - Suggest improvements if something does not scale.

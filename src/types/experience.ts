@@ -21,10 +21,13 @@ export type Experience = {
   purge_at: string | null;
   organizer_id: string | null;
   edit_info_policy: MemoryPermissionPolicy;
+  chat_policy: MemoryPermissionPolicy;
   am_organizer: boolean;
   am_participant: boolean;
   pending_invitation_id: string | null;
   can_revive: boolean;
+  can_send_chat: boolean;
+  can_react_chat: boolean;
   notifications_muted: boolean;
   created_at: string;
   updated_at: string;
@@ -181,6 +184,22 @@ export function canLeaveExperienceNow(
 
 export function canReviveExperience(experience: Experience): boolean {
   return experience.am_participant && experience.can_revive;
+}
+
+/** Chat-eligible lifecycle + accepted participant (matches SQL `chat_read` floor). */
+export function canAccessExperienceChat(
+  experience: Pick<Experience, 'am_participant' | 'status'>,
+): boolean {
+  if (!experience.am_participant) return false;
+  return experience.status === 'planned' || experience.status === 'cancelled';
+}
+
+export function canSendExperienceChat(experience: Experience): boolean {
+  return canAccessExperienceChat(experience) && experience.can_send_chat;
+}
+
+export function canReactExperienceChat(experience: Experience): boolean {
+  return canAccessExperienceChat(experience) && experience.can_react_chat;
 }
 
 export function isPendingExperienceInvitee(
