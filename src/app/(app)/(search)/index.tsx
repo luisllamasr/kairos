@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
 import { InsetView } from '@/components/InsetView';
@@ -29,6 +29,10 @@ export default function SearchScreen() {
   const [error, setError] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  // A faster, later-typed query can resolve before an earlier, slower one —
+  // this guards against the slower response overwriting the fresher result.
+  const searchGenerationRef = useRef(0);
+
   useEffect(() => {
     setQuery('');
     setResults([]);
@@ -39,6 +43,7 @@ export default function SearchScreen() {
 
   useEffect(() => {
     const normalized = normalizeUsernameQuery(query);
+    const generation = ++searchGenerationRef.current;
 
     if (normalized.length < USERNAME_SEARCH_MIN_LENGTH) {
       setResults([]);
@@ -53,6 +58,7 @@ export default function SearchScreen() {
 
     const timer = setTimeout(async () => {
       const { data, error: searchError } = await searchProfiles(normalized);
+      if (searchGenerationRef.current !== generation) return;
       setResults(data);
       setError(searchError);
       setLoading(false);

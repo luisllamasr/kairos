@@ -6,6 +6,10 @@ This document records Kairos’ database security architecture, what is delibera
 
 **Status:** Pre-M15 security review **complete** (migrations through `261620`). Remaining Advisor items are documented intentional outcomes below.
 
+**Post-M15 hardening (pre-launch production-readiness audit, `20260729100000`–`20260729100100`):** closed two real gaps found by re-deriving documented behavior from the actual SQL rather than trusting prior docs — see the Notifications and Storage RLS sections below, and the migrations table.
+
+**Auth vault hardening (client-side, no migration version — see `src/lib/auth-storage.ts`):** session tokens moved from plaintext `AsyncStorage` to AES-256-encrypted `AsyncStorage` with the key held in `expo-secure-store` (Keychain/Keystore); see Client-side session storage below.
+
 ---
 
 ## Authentication
@@ -41,6 +45,30 @@ Supabase’s [Password security docs](https://supabase.com/docs/guides/auth/pass
 
 ---
 
+## Client-side session storage (auth vault, `src/lib/auth-storage.ts`)
+
+Kairos remembers multiple signed-in accounts on one device (multi-account switching). Each remembered account's Supabase session (access + refresh token pair) is a bearer credential — equivalent in sensitivity to a password even though Kairos has none — and is treated accordingly.
+
+| Data | Where | Why |
+|------|-------|-----|
+| Active/dormant account **session tokens** (per user) | `AsyncStorage`, **AES-256-CTR encrypted** | Full session JSON (JWT + refresh token + user object) routinely exceeds Expo SecureStore's ~2048-byte per-value limit, so it cannot live in SecureStore directly. |
+| **AES-256 key** for the vault (one key, shared by all accounts) | `expo-secure-store` (iOS Keychain / Android Keystore) | The only artifact that needs hardware-backed protection is this ~32-byte key — small enough for SecureStore's limit, and it's the single thing that makes every encrypted session blob unreadable without device-level Keychain/Keystore access. |
+| `activeUserId` + per-account snapshot (email, username, display name, avatar) | `AsyncStorage`, plaintext | Not sensitive at the storage layer; needed for fast switcher-UI rendering. |
+
+**Key reuse (deliberate correction to the pattern in Supabase's own Expo/SecureStore docs):** the AES key is generated once and persisted, then reused for every encrypt operation, with a fresh random IV per value. Supabase's published example regenerates a new key on every write, which is invisible in a single-session tutorial but would silently corrupt every *other* account's already-encrypted vault entry in a multi-account app like Kairos.
+
+**Display-layer redaction (`RememberedAccountRow`):** even though the snapshot's email isn't sensitive at the storage layer, a device can be shared or glanced at by someone other than the account owner. Any row that isn't the currently-authenticated account (dormant *and* signed-out rows alike) falls back to a generic label/avatar-initial instead of the stored email when `display_name`/`username` are unset — the email is used internally to drive re-authentication (pre-filling the OTP screen), but is only ever rendered on screen once that re-authentication flow is actually entered.
+
+**Migration:** upgrading from the pre-encryption plaintext vault (or the older pre-vault single-session format) happens automatically and lazily on first use after the update — no re-authentication required. Entirely internal to `auth-storage.ts`; no other file is aware sessions are encrypted, or that they were ever stored any other way.
+
+**Sign-out side channel (`withAuthRemoveMode`):** Supabase's storage adapter contract gives `removeItem(key)` no way to receive caller intent, but Kairos' vault needs to know *why* a `signOut()` call is happening (full purge vs. session-only vs. pointer-only — e.g. switching accounts must not touch other accounts' vaulted sessions). `withAuthRemoveMode(mode, fn)` sets that intent for the duration of `fn` and restores the default in a `finally`, so a thrown/rejected `signOut()` can never leak a non-default mode into an unrelated later call.
+
+**Not yet covered (tracked, not forgotten):** dormant (inactive) accounts' refresh tokens are not proactively refreshed in the background. They stay valid until superseded elsewhere (Supabase rotates on use, not on a timer), so switching either succeeds instantly or falls back to OTP re-auth — never a crash. Making this fully seamless (no OTP fallback ever) is scoped as an independent follow-up.
+
+**Crash/interruption recovery (fixed):** `addAccount()`/`reauthAccount()` deactivate the active session pointer (`deactivateActiveSessionInVault`) before navigating to sign-in, without deleting that account's stored tokens. If the app was killed in that window, the account became invisible on the sign-in screen's "signed out" list (which only lists accounts with **no** stored session) and typing its email returned a hard "already signed in" error — a real dead end, since the only place that error's suggested fix ("switch from Profile") was reachable required an active session. Fixed by treating any account with a stored session as **dormant and resumable** whenever there's no active session at all (sign-in screen "Continue on this device" list + the email-entry path), distinct from **signed out** accounts, which still require OTP. Both paths ultimately call `reauthAccount()`, which already branched correctly internally — the gap was in what the UI surfaced, not in the resume logic itself.
+
+---
+
 ## Architecture pattern
 
 | Layer | Mechanism |
@@ -48,7 +76,7 @@ Supabase’s [Password security docs](https://supabase.com/docs/guides/auth/pass
 | Table writes (domain) | No direct `INSERT`/`UPDATE`/`DELETE` grants to `authenticated` on domain tables |
 | Permissions | **SECURITY DEFINER RPCs** enforce business rules (`auth.uid()` checks, leadership columns) |
 | Table reads | **SECURITY INVOKER** RPCs + RLS on underlying tables |
-| Notifications (own rows) | `notifications` grants `SELECT`/`UPDATE` to `authenticated` with RLS; read/mark RPCs are **INVOKER** |
+| Notifications (own rows) | `notifications` grants `SELECT` only to `authenticated` (RLS: `recipient_id = auth.uid()`); reads also via `list_notifications`/`count_unread_notifications` (**INVOKER**); all writes go through `mark_notification_read` (**DEFINER**) — no direct client `UPDATE` (`20260729100100`) |
 | Membership helpers | **Split overloads** — one-arg public (caller-only), two-arg internal (write RPCs) |
 | Other internal helpers | **SECURITY DEFINER**, `REVOKE ALL FROM PUBLIC`, no client `EXECUTE` |
 | Triggers / crons | **SECURITY DEFINER**, not callable by clients |
@@ -124,7 +152,7 @@ Three helpers gate RLS and Storage. They use **PostgreSQL overloads**:
 | `list_experience_invitations` | DEFINER | Leader + participant views |
 | `list_experience_invite_suggestions` | DEFINER | Leader review queue |
 | `create_experience` … `set_experience_notifications_muted` | DEFINER | Writes — see migrations |
-| `ensure_experience_transformed` | DEFINER | Lazy transform (organizer-only) |
+| `ensure_experience_transformed` | DEFINER | Lazy transform — callable by **any participant** (not organizer-only); idempotent and time-gated (`status = 'planned' AND transform_at <= NOW()`), so no caller-identity restriction is needed |
 | `purge_my_stale_experiences` | DEFINER | Eager purge before Home list |
 | `transform_my_due_experiences` | DEFINER | Batch transform before lists |
 
@@ -175,9 +203,10 @@ Migrating these to INVOKER would require reopening table write grants and duplic
 
 ## Storage RLS
 
-| Bucket | Policy helper | Why EXECUTE on one-arg helper |
-|--------|---------------|-------------------------------|
-| `memories` | `is_active_memory_participant(uuid)` | PostgreSQL requires EXECUTE on functions referenced in policy expressions for the calling role. |
+| Bucket | Policy | Notes |
+|--------|--------|-------|
+| `memories` (SELECT/DELETE) | `is_active_memory_participant(uuid)` | PostgreSQL requires EXECUTE on functions referenced in policy expressions for the calling role. |
+| `memories` (INSERT) | `is_active_memory_participant(uuid)` **and** `memories.add_media_policy = 'all_participants' OR memories.leader_id = auth.uid()` | Mirrors `register_memory_photo()`'s policy check exactly (`20260729100100`) — previously the storage layer only checked membership, so a participant could upload directly to storage even when the memory was `leader_only`. |
 
 Client must **not** call `storage.remove` for lifecycle deletes — DB triggers + Edge Functions handle cleanup.
 
@@ -197,6 +226,8 @@ M12 created `experiences_select_organizer`. M14 added participant and pending-in
 | `261601` | Revoke accidental client grant on `transform_experience_to_memory` |
 | `261610` | Membership helper hardening — split one-arg / two-arg; revoke two-arg from clients |
 | `261620` | Memory read RPCs + `mark_notification_read` → INVOKER |
+| `20260729100000` | Deterministic lock order + `SKIP LOCKED` for `transform_my_due_experiences` / `purge_my_stale_experiences` (deadlock risk under concurrent shared-experience access) |
+| `20260729100100` | Revoke direct client `UPDATE` on `notifications` (RPC-only writes); enforce `add_media_policy` in memory storage upload RLS |
 
 ---
 

@@ -22,7 +22,7 @@ import { MemoryListItem } from '@/types/memory';
 
 export default function ProfileScreen() {
   const { profile } = useAuth();
-  const { t, locale } = useI18n();
+  const { t, tn, locale } = useI18n();
   const colors = useTheme();
 
   const [incomingRequestCount, setIncomingRequestCount] = useState(0);
@@ -118,9 +118,7 @@ export default function ProfileScreen() {
             style={({ pressed }) => [styles.requestsLink, pressed && styles.pressed]}
           >
             <Text variant="body" style={{ color: colors.brand }}>
-              {t('profile.friendRequestsWithCount', {
-                count: String(incomingRequestCount),
-              })}
+              {tn('profile.friendRequestsCount.other', incomingRequestCount)}
             </Text>
           </Pressable>
         ) : null}

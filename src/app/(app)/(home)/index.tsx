@@ -21,7 +21,7 @@ const EDGES = TAB_SAFE_AREA_EDGES;
 
 export default function HomeScreen() {
   const { session } = useAuth();
-  const { t, locale } = useI18n();
+  const { t, tn, locale } = useI18n();
   const colors = useTheme();
 
   const [experiences, setExperiences] = useState<ExperienceListItem[]>([]);
@@ -92,7 +92,7 @@ export default function HomeScreen() {
             <View style={styles.invitationsSlot}>
               {invitationCount > 0 ? (
                 <Button
-                  label={t('home.invitationsWithCount', { count: String(invitationCount) })}
+                  label={tn('home.invitationsCount.other', invitationCount)}
                   variant="secondary"
                   onPress={() => router.push('/(app)/(home)/invitations')}
                 />

@@ -9,6 +9,7 @@ export const en = {
   'auth.signIn.error.alreadySignedIn':
     'This account is already signed in on this device. Switch accounts from Profile.',
   'auth.signIn.reauth.subtitle': 'Sign back in as {{name}}.',
+  'auth.signIn.continueOnDevice.title': 'Continue on this device',
   'auth.signIn.remembered.title': 'Remembered on this device',
   'auth.signIn.remembered.orEmail': 'Or sign in with email',
   'auth.signIn.addAccount.subtitle': 'Sign in with another email to add it to this device.',
@@ -23,6 +24,8 @@ export const en = {
   'auth.verify.codePlaceholder': '000000',
   'auth.verify.submit': 'Verify code',
   'auth.verify.changeEmail': 'Use a different email',
+  'auth.verify.error.invalidCode': 'That code is incorrect or has expired. Request a new one.',
+  'auth.verify.error.generic': 'Something went wrong. Please try again.',
 
   'tab.home': 'Home',
   'tab.search': 'Search',
@@ -34,7 +37,8 @@ export const en = {
   'home.empty': 'No upcoming plans yet.',
   'home.emptyHint': 'Plan something worth remembering.',
   'home.loadError': 'Could not load your plans. Please try again.',
-  'home.invitationsWithCount': 'Experience invitations ({{count}})',
+  'home.invitationsCount.one': '{{count}} experience invitation',
+  'home.invitationsCount.other': '{{count}} experience invitations',
 
   'experiences.back': 'Back',
   'experiences.title.placeholder': 'What are you planning?',
@@ -209,7 +213,8 @@ export const en = {
   'profile.memoriesSection.search': 'Search',
   'profile.memoriesSection.empty':
     "You don't have memories yet. Experiences will appear here after you live them.",
-  'profile.friendRequestsWithCount': 'Friend requests ({{count}})',
+  'profile.friendRequestsCount.one': '{{count}} friend request',
+  'profile.friendRequestsCount.other': '{{count}} friend requests',
   'profile.switchAccount': 'Switch account',
   'profile.deleteAccount': 'Delete account',
   'profile.signOut': 'Sign out',
@@ -255,7 +260,10 @@ export const en = {
   'switchAccount.title': 'Switch Account',
   'switchAccount.active': 'Active',
   'switchAccount.signedOut': 'Signed out',
+  'switchAccount.unnamedAccount': 'Kairos account',
   'switchAccount.logIn': 'Log in',
+  'switchAccount.continue': 'Continue',
+  'switchAccount.readyToContinue': 'No code needed',
   'switchAccount.switching': 'Switching…',
   'switchAccount.addAccount': 'Add account',
   'switchAccount.cancel': 'Cancel',

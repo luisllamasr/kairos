@@ -186,11 +186,16 @@ export function formatAggregatedReactions(
 }
 
 export async function refreshMessageReactions(
-  experienceId: string,
   messageId: string,
 ): Promise<{ reactions: ExperienceMessageReaction[]; error: boolean }> {
-  const { data, error } = await listExperienceMessages(experienceId, null, 100);
+  const { data, error } = await supabase.rpc('get_experience_message_reactions', {
+    p_message_id: messageId,
+  });
   if (error) return { reactions: [], error: true };
-  const message = data.find((item) => item.id === messageId);
-  return { reactions: message?.reactions ?? [], error: false };
+  const reactions = Array.isArray(data)
+    ? data
+        .map((item) => mapReaction(item))
+        .filter((item): item is ExperienceMessageReaction => item !== null)
+    : [];
+  return { reactions, error: false };
 }

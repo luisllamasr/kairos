@@ -55,6 +55,18 @@ Pre-M13 chain is unchanged (`170000` profiles → `241100` experiences).
 
 Security model: `docs/SECURITY.md`.
 
+## Post-M15 security & reliability hardening (pre-launch production-readiness audit)
+
+Not tied to a product milestone — findings from a full architecture/security audit, confirmed against actual project intent before implementing. Full timestamps used (not the milestone shorthand above) since this isn't a milestone chain.
+
+| Version | File | Purpose |
+|---------|------|---------|
+| `20260729100000` | `lifecycle_lock_ordering_hardening.sql` | Deterministic lock order + `SKIP LOCKED` for `transform_my_due_experiences` / `purge_my_stale_experiences` — matches the existing cron pattern; closes a deadlock risk when concurrent participants of shared experiences trigger both eagerly |
+| `20260729100100` | `close_security_gaps.sql` | Revoke direct client `UPDATE` on `notifications` (all writes now RPC-only, matching the rest of the domain model); enforce `add_media_policy` in memory storage upload RLS (previously only `register_memory_photo` enforced it, so direct storage uploads could bypass a `leader_only` policy) |
+| `20260729100200` | `experiences_created_by_nullable.sql` | Drop `NOT NULL` on `experiences.created_by` — its `ON DELETE SET NULL` FK (added in `261000`) crashed account deletion for any user who created a shared experience that outlives them; mirrors the nullable treatment `organizer_id` already got in that same migration |
+| `20260729110000` | `storage_cleanup_reconciliation.sql` | `storage_cleanup_failures` ledger + `retry-storage-cleanup-failures` cron (15 min). `cleanup-user-storage` / `cleanup-memory-storage` were fire-and-forget with no retry on failure; both Edge Functions now record failures with backoff (+15m/+1h/+6h/+24h, then `failed_permanently`) and resolve them on a later success. Cron only re-fires stored payloads — it never writes to the ledger, so there's exactly one writer of ledger state |
+| `20260729120000` | `experience_chat_reaction_refresh_rpc.sql` | `get_experience_message_reactions(p_message_id)` — a reaction add/remove (or realtime reaction event) previously called `list_experience_messages(..., 100)` and discarded everything except one message's `reactions` array; this RPC reads exactly the one row needed. Same SECURITY INVOKER / RLS-gated pattern as `list_experience_messages` |
+
 ## Storage lifecycle
 
 | Event | DB | Storage cleanup |
@@ -65,3 +77,5 @@ Security model: `docs/SECURITY.md`.
 | Daily cron | `maintain_orphaned_memories()` | As above for purged rows |
 
 Client must **not** call `storage.remove` for lifecycle deletes.
+
+**Reconciliation:** both cleanup Edge Functions run async via `pg_net` after the DB row is already gone. If the Storage API call itself fails, the function records it in `public.storage_cleanup_failures` (service-role only, no client access); `retry-storage-cleanup-failures` re-fires the stored payload every 15 minutes with backoff, up to 5 attempts total, before giving up (`failed_permanently`). No alerting yet — query the table directly until this is wired into observability tooling.

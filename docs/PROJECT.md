@@ -85,6 +85,28 @@ There is no separate “propose and validate before public” pipeline for user 
 
 ---
 
+## 6. Privacy and profile visibility (future — Settings & Privacy)
+
+Profile visibility in Kairos is **layered**, not binary. It is neither fully public nor fully private.
+
+**Two audiences:**
+
+- **Non-friends** see only a **basic public profile**: profile picture, display name, username, and any additional field the owner has explicitly chosen to make public.
+- **Friends** see additional information — but not automatically everything. Visibility of each additional field (and of memories on the profile) is controlled by the owner's own privacy preferences, not granted wholesale by the friendship itself.
+
+**Owner controls, not defaults:** users decide what they share, at the field level, through a future **Settings & Privacy** section. Examples of preferences that section will expose:
+
+- Whether memories appear on their profile at all.
+- Whether memories on their profile are visible to friends only, or more broadly.
+- Whether individual profile fields are public or friends-only.
+- Additional privacy preferences that may grow over time.
+
+**Current state (temporary — not the intended design):** today, `profiles` RLS allows any authenticated user to read a profile's full row with no tiering (`USING (true)`). This is a known, deliberately-parked gap, not a product decision — it exists only because the Settings & Privacy section has not been built yet. Do not treat unrestricted visibility as acceptable long-term behavior, and do not design future features around it as if it were final.
+
+**Anti-drift rule:** build the complete layered privacy model in **one coherent pass** when this section is implemented — do not ship an intermediate/partial visibility tier now and redesign it later. This is the designated next major feature after the current production-readiness hardening pass (see `docs/SECURITY.md` for the hardening work in progress).
+
+---
+
 # Technical stack
 
 ## Frontend
@@ -151,7 +173,9 @@ Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
 # Current status
 
 Phase:
-Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, and **M14 shared experiences** complete — including notification retention and list/detail UX polish. **M15 Experience chat** — product philosophy locked; implementation next.
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, **M14 shared experiences**, and **M15 Experience chat** complete. Currently running a production-readiness architecture/security audit and hardening pass (see `docs/SECURITY.md`) before public launch — no new product features during this phase.
+
+**Next major feature after hardening completes:** Settings & Privacy — the layered profile visibility model described in **Core principles → 6. Privacy and profile visibility**. Do not build an intermediate/partial version of this before then.
 
 Created by:
 Luis Llamas Ramón
@@ -173,6 +197,7 @@ Completed milestones:
 13. Memories (transform lifecycle, Profile feed/detail, photos, storage cleanup, leave memory). ✓
 14. M13.5 cleanup (photo delete, migration squash, security audit). ✓
 15. Shared experiences (M14 — invites, participants, lifecycle, notifications foundation, leadership SSOT cleanup). ✓
+16. Experience chat (M15 — participant-only coordination, Realtime, reactions, `chat_policy`). ✓
 
 ---
 
@@ -223,7 +248,7 @@ Build **Create → Live → Remember** in order. Full milestone breakdown and pr
 | **13. Memories** ✓ | Shared memory core + personal layer; automatic transform; timeline |
 | **13.5 Cleanup** ✓ | Photo delete, migration squash, storage lifecycle, security audit |
 | **14. Shared experiences** ✓ | Invites, suggest flow, group transform, notifications foundation + inbox retention |
-| **15. Experience chat** | Experience-scoped coordination; Realtime; ephemeral (CASCADE with experience); `chat_policy`; not DMs or memory chat |
+| **15. Experience chat** ✓ | Experience-scoped coordination; Realtime; ephemeral (CASCADE with experience); `chat_policy`; not DMs or memory chat |
 | **16. Public experiences** | Discoverable plans; open join |
 | **17. Join approval** | Request → approve/decline |
 | **18. Opportunities** | Catalog → “Plan this” → experience |
@@ -740,6 +765,8 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 
 **Transform before list (client):** Profile, memories search, and **Home** call `transform_my_due_experiences()` as an explicit **write RPC** before listing — not embedded in read RPCs. Home also calls `purge_my_stale_experiences()` before listing plans. **Home list visibility** uses row existence (`status = planned`), not `transform_at > now()` — a due plan stays visible until transform DELETEs it (optional UI: “Becoming a memory…”). Also: ended experience detail (`ensure_experience_transformed`), global cron every 15 min (transform + stale experience purge).
 
+**Why three transform-triggering mechanisms:** `ensure_experience_transformed` (lazy, on-read), `transform_my_due_experiences` (client-triggered, before Home/Profile/memories list), and `transform_due_experiences` (cron, every 15 min) all call the same underlying `transform_experience_to_memory` — this is deliberate defense in depth, not redundancy left over from an earlier design. No single mechanism is sufficient on its own: the cron alone would mean a plan sits "planned" for up to 15 minutes after `transform_at` even if the user is actively looking at it; the client-triggered RPC alone would mean an experience never transforms if the participant never reopens the app; the lazy on-read guard alone would mean a plan never transforms until *someone* happens to view it. Together they guarantee a plan becomes a memory (a) immediately if a participant is looking at Home/Profile/memories right when it's due, (b) within 15 minutes regardless of whether anyone is using the app, and (c) instantly and correctly if a participant opens the specific experience detail screen before either of the above ran. All three are idempotent and safe to run concurrently — `transform_experience_to_memory` is guarded so a plan can only be transformed once.
+
 **RPC implementation note:** Do not use plpgsql `RETURNS TABLE (id, …)` with `RETURN QUERY SELECT m.id, …` — PostgreSQL error **42702**. Use **LANGUAGE sql** (like experiences).
 
 ### Storage lifecycle
@@ -750,6 +777,8 @@ When a **parent entity** is truly deleted, dependent rows must disappear via CAS
 | `memories` | `{memory_id}/{media_id}.ext` | Single photo → `delete_memory_photo` RPC → `DELETE memory_media` → pg_net → `cleanup-memory-storage` (single path); **whole memory** → `DELETE memories` → pg_net → folder cleanup |
 
 **Memory storage cleanup:** Both use the same Edge Function (`cleanup-memory-storage`) via pg_net after commit — never client `storage.remove` for lifecycle deletes.
+
+**Failure reconciliation (`20260729110000`):** `cleanup-user-storage` and `cleanup-memory-storage` run async and can fail (Storage API error, transient outage) after the DB row that triggered them is already gone. Both functions record failures in `public.storage_cleanup_failures` (service-role only, no client/RPC access) and resolve them on a later success; the `retry-storage-cleanup-failures` cron (every 15 min) re-fires the exact stored payload with backoff (+15m/+1h/+6h/+24h), giving up after 5 total attempts (`status = 'failed_permanently'`). The cron never writes to the ledger itself — only the Edge Functions do — so there's exactly one writer of ledger state. No alerting yet; query the table directly until Sentry/PostHog observability work covers this.
 
 | Trigger | Payload | Storage action |
 |---------|---------|----------------|
@@ -859,7 +888,7 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Milestone 15 — Experience chat** — product philosophy locked below; implementation next (schema → RPCs → UI + Realtime).
+**Production-readiness hardening** — architecture/security audit findings being addressed slice by slice before public launch (see `docs/SECURITY.md`). **Milestone 15 — Experience chat** (below) is complete. **Settings & Privacy** (see Core principles → 6. Privacy and profile visibility) is the next major feature once hardening completes.
 
 ---
 

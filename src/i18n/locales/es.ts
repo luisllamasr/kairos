@@ -11,6 +11,7 @@ export const es: Record<TranslationKey, string> = {
   'auth.signIn.error.alreadySignedIn':
     'Esta cuenta ya tiene sesión iniciada en este dispositivo. Cambia de cuenta desde Perfil.',
   'auth.signIn.reauth.subtitle': 'Vuelve a iniciar sesión como {{name}}.',
+  'auth.signIn.continueOnDevice.title': 'Continuar en este dispositivo',
   'auth.signIn.remembered.title': 'Recordadas en este dispositivo',
   'auth.signIn.remembered.orEmail': 'O inicia sesión con correo',
   'auth.signIn.addAccount.subtitle': 'Inicia sesión con otro correo para agregarlo a este dispositivo.',
@@ -25,6 +26,8 @@ export const es: Record<TranslationKey, string> = {
   'auth.verify.codePlaceholder': '000000',
   'auth.verify.submit': 'Verificar código',
   'auth.verify.changeEmail': 'Usar un correo diferente',
+  'auth.verify.error.invalidCode': 'Ese código es incorrecto o ha caducado. Solicita uno nuevo.',
+  'auth.verify.error.generic': 'Algo salió mal. Por favor, inténtalo de nuevo.',
 
   'tab.home': 'Inicio',
   'tab.search': 'Buscar',
@@ -36,7 +39,8 @@ export const es: Record<TranslationKey, string> = {
   'home.empty': 'Aún no tienes planes.',
   'home.emptyHint': 'Planea algo que merezca ser recordado.',
   'home.loadError': 'No se pudieron cargar tus planes. Por favor, inténtalo de nuevo.',
-  'home.invitationsWithCount': 'Invitaciones a experiencias ({{count}})',
+  'home.invitationsCount.one': '{{count}} invitación a experiencia',
+  'home.invitationsCount.other': '{{count}} invitaciones a experiencias',
 
   'experiences.back': 'Atrás',
   'experiences.title.placeholder': '¿Qué estás planeando?',
@@ -210,7 +214,8 @@ export const es: Record<TranslationKey, string> = {
   'profile.memoriesSection.search': 'Buscar',
   'profile.memoriesSection.empty':
     'Aún no tienes recuerdos. Tus experiencias aparecerán aquí después de vivirlas.',
-  'profile.friendRequestsWithCount': 'Solicitudes de amistad ({{count}})',
+  'profile.friendRequestsCount.one': '{{count}} solicitud de amistad',
+  'profile.friendRequestsCount.other': '{{count}} solicitudes de amistad',
   'profile.switchAccount': 'Cambiar cuenta',
   'profile.deleteAccount': 'Eliminar cuenta',
   'profile.signOut': 'Cerrar sesión',
@@ -256,7 +261,10 @@ export const es: Record<TranslationKey, string> = {
   'switchAccount.title': 'Cambiar Cuenta',
   'switchAccount.active': 'Activa',
   'switchAccount.signedOut': 'Sesión cerrada',
+  'switchAccount.unnamedAccount': 'Cuenta de Kairos',
   'switchAccount.logIn': 'Iniciar sesión',
+  'switchAccount.continue': 'Continuar',
+  'switchAccount.readyToContinue': 'Sin código',
   'switchAccount.switching': 'Cambiando…',
   'switchAccount.addAccount': 'Agregar cuenta',
   'switchAccount.cancel': 'Cancelar',

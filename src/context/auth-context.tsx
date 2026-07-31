@@ -1,6 +1,15 @@
 import { Session } from '@supabase/supabase-js';
 import { router } from 'expo-router';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   deactivateActiveSessionInVault,
@@ -13,8 +22,8 @@ import {
   RememberedAccount,
   removeAccountFromVault,
   setActiveUserInVault,
-  setAuthRemoveMode,
   updateAccountSnapshot,
+  withAuthRemoveMode,
 } from '@/lib/auth-storage';
 import { resetAppNavigationToHome } from '@/navigation/reset-app-navigation';
 import { supabase } from '@/lib/supabase';
@@ -200,8 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setProfile(null);
         setProfileError(false);
-        setAuthRemoveMode('active-only');
-        await supabase.auth.signOut({ scope: 'local' });
+        await withAuthRemoveMode('active-only', () => supabase.auth.signOut({ scope: 'local' }));
         await syncAccounts();
       }
     });
@@ -320,8 +328,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setAuthTransitioning(true);
     try {
-      setAuthRemoveMode('purge-session-only');
-      await supabase.auth.signOut({ scope: 'global' });
+      await withAuthRemoveMode('purge-session-only', () =>
+        supabase.auth.signOut({ scope: 'global' }),
+      );
 
       if (othersWithSession.length > 0) {
         await activateStoredAccount(othersWithSession[0].userId, true);
@@ -450,8 +459,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthTransitioning(true);
     try {
       await removeAccountFromVault(userId);
-      setAuthRemoveMode('active-only');
-      await supabase.auth.signOut({ scope: 'local' });
+      await withAuthRemoveMode('active-only', () => supabase.auth.signOut({ scope: 'local' }));
 
       if (othersWithSession.length > 0) {
         await activateStoredAccount(othersWithSession[0].userId, true);
@@ -465,28 +473,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [activateStoredAccount, syncAccounts]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        session,
-        profile,
-        profileError,
-        loading: !authInitialized || authTransitioning,
-        profileLoading,
-        accounts,
-        refreshProfile,
-        switchAccount,
-        signOutAccount,
-        addAccount,
-        reauthAccount,
-        cancelAddAccount,
-        forgetAccountOnDevice: forgetAccountOnDeviceHandler,
-        completeAccountDeletion,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const loading = !authInitialized || authTransitioning;
+
+  const value = useMemo(
+    (): AuthContextValue => ({
+      session,
+      profile,
+      profileError,
+      loading,
+      profileLoading,
+      accounts,
+      refreshProfile,
+      switchAccount,
+      signOutAccount,
+      addAccount,
+      reauthAccount,
+      cancelAddAccount,
+      forgetAccountOnDevice: forgetAccountOnDeviceHandler,
+      completeAccountDeletion,
+    }),
+    [
+      session,
+      profile,
+      profileError,
+      loading,
+      profileLoading,
+      accounts,
+      refreshProfile,
+      switchAccount,
+      signOutAccount,
+      addAccount,
+      reauthAccount,
+      cancelAddAccount,
+      forgetAccountOnDeviceHandler,
+      completeAccountDeletion,
+    ],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

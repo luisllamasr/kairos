@@ -29,6 +29,17 @@ export default function VerifyScreen() {
     }
   }, [email]);
 
+  // Supabase's own text ("Token has expired or is invalid") is accurate but
+  // not user-facing copy — mirrors sign-in's mapSendError for the same reason:
+  // map known cases to friendly copy, fall back to a generic message for
+  // anything unrecognized rather than ever showing the raw provider string.
+  function mapVerifyError(message: string): string {
+    if (/expired/i.test(message) || /invalid/i.test(message)) {
+      return t('auth.verify.error.invalidCode');
+    }
+    return t('auth.verify.error.generic');
+  }
+
   async function handleVerify() {
     if (!code.trim() || !email) return;
 
@@ -44,7 +55,7 @@ export default function VerifyScreen() {
     setLoading(false);
 
     if (verifyError) {
-      setError(verifyError.message);
+      setError(mapVerifyError(verifyError.message));
     } else {
       // Clear the pending flag on successful verification.
       otpPending.clear();

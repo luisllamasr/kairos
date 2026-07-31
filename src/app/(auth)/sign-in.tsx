@@ -42,7 +42,12 @@ function resolveStoredEmail(
   if (sessionEmail?.toLowerCase() === normalized) {
     return 'already_active';
   }
-  if (match?.hasSession) {
+  // A match with a stored session only blocks with "already signed in" when
+  // there is an active session elsewhere to switch from (Profile is reachable).
+  // With no active session at all, a match is resumable right here — whether
+  // it's dormant (instant, no OTP) or fully signed out (OTP) is handled by
+  // reauthAccount() itself, same as tapping its row above.
+  if (match?.hasSession && sessionEmail) {
     return 'already_signed_in';
   }
   if (match) {
@@ -69,6 +74,16 @@ export default function SignInScreen() {
 
   const signedOutAccounts = useMemo(
     () => accounts.filter((account) => !account.hasSession),
+    [accounts],
+  );
+
+  // With no active session on screen (guaranteed here — see showRememberedList
+  // below), any account with a stored session is dormant, not active: its
+  // tokens are still on this device, just not loaded into the client. Most
+  // commonly reached after an add-account/reauth flow was interrupted before
+  // completing — this list is what makes that account recoverable again.
+  const dormantAccounts = useMemo(
+    () => accounts.filter((account) => account.hasSession),
     [accounts],
   );
 
@@ -185,8 +200,9 @@ export default function SignInScreen() {
     router.push({ pathname: '/(auth)/verify', params: { email: trimmed } });
   }
 
-  const showRememberedList =
-    !session && !isReauthMode && !isAddAccountMode && signedOutAccounts.length > 0;
+  const canShowRememberedLists = !session && !isReauthMode && !isAddAccountMode;
+  const showContinueList = canShowRememberedLists && dormantAccounts.length > 0;
+  const showSignedOutList = canShowRememberedLists && signedOutAccounts.length > 0;
 
   const subtitle = isReauthMode
     ? t('auth.signIn.reauth.subtitle', {
@@ -205,7 +221,25 @@ export default function SignInScreen() {
         {subtitle}
       </Text>
 
-      {showRememberedList ? (
+      {showContinueList ? (
+        <View style={styles.rememberedBlock}>
+          <Text variant="body" style={styles.rememberedHeading}>
+            {t('auth.signIn.continueOnDevice.title')}
+          </Text>
+          {dormantAccounts.map((account) => (
+            <RememberedAccountRow
+              key={account.userId}
+              account={account}
+              dormant
+              isLoading={reauthLoadingUserId === account.userId}
+              disabled={reauthLoadingUserId !== null && reauthLoadingUserId !== account.userId}
+              onLogIn={() => handleRememberedLogIn(account.userId)}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {showSignedOutList ? (
         <View style={styles.rememberedBlock}>
           <Text variant="body" style={styles.rememberedHeading}>
             {t('auth.signIn.remembered.title')}
@@ -219,10 +253,13 @@ export default function SignInScreen() {
               onLogIn={() => handleRememberedLogIn(account.userId)}
             />
           ))}
-          <Text variant="caption" style={styles.rememberedDivider}>
-            {t('auth.signIn.remembered.orEmail')}
-          </Text>
         </View>
+      ) : null}
+
+      {showContinueList || showSignedOutList ? (
+        <Text variant="caption" style={styles.rememberedDivider}>
+          {t('auth.signIn.remembered.orEmail')}
+        </Text>
       ) : null}
 
       <Input
