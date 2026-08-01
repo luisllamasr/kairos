@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
@@ -10,6 +9,7 @@ import { UserSearchResult } from '@/components/UserSearchResult';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { normalizeUsernameQuery, searchProfiles, USERNAME_SEARCH_MIN_LENGTH } from '@/lib/users';
@@ -22,6 +22,7 @@ export default function SearchScreen() {
   const { session } = useAuth();
   const { t } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PublicProfile[]>([]);
@@ -82,7 +83,7 @@ export default function SearchScreen() {
           <UserSearchResult
             profile={item}
             onPress={() =>
-              router.push({
+              push({
                 pathname: '/(app)/(search)/user/[username]',
                 params: { username: item.username },
               })

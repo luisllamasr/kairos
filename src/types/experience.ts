@@ -127,15 +127,6 @@ export function hasActiveExperienceLeader(
   return experience.status === 'planned';
 }
 
-export function canRemoveExperience(experience: Experience): boolean {
-  return (
-    experience.am_participant &&
-    experience.am_organizer &&
-    hasActiveExperienceLeader(experience) &&
-    isExperienceUpcoming(experience)
-  );
-}
-
 export function canManageExperienceParticipants(experience: Experience): boolean {
   return (
     experience.am_participant &&
@@ -166,20 +157,26 @@ export function canLeaveExperience(experience: Experience): boolean {
   return isExperienceUpcoming(experience) || isExperiencePurgePending(experience);
 }
 
-/** Solo planned leader must delete the plan; cancelled participants (including ex-leader) may always leave. */
-export function canLeaveExperienceNow(
+/**
+ * Active leader with other participants must choose a successor before leave
+ * (`leave_experience` + `p_new_organizer_id`). Last participant leave orphans
+ * and deletes the experience server-side — no separate "delete plan" UI.
+ */
+export function needsLeaveSuccessor(
   experience: Experience,
   participantCount: number,
 ): boolean {
-  if (!canLeaveExperience(experience)) return false;
-  if (
+  return (
+    canLeaveExperience(experience) &&
     hasActiveExperienceLeader(experience) &&
     experience.am_organizer &&
-    participantCount <= 1
-  ) {
-    return false;
-  }
-  return true;
+    participantCount > 1
+  );
+}
+
+/** True when this participant is the only one left (leaving deletes the plan). */
+export function isLastExperienceParticipant(participantCount: number): boolean {
+  return participantCount <= 1;
 }
 
 export function canReviveExperience(experience: Experience): boolean {

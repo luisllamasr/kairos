@@ -8,7 +8,22 @@ import {
   IncomingExperienceInvitation,
 } from '@/types/experience';
 
-type RpcResult = { ok: boolean; error: boolean };
+type RpcResult = { ok: boolean; error: boolean; errorCode?: string };
+
+/** Postgres RAISE EXCEPTION messages we map to specific UI copy. */
+export type ExperienceInviteErrorCode =
+  | 'suggestion pending'
+  | 'invite pending'
+  | 'already participant'
+  | 'invite blocked'
+  | 'not friends'
+  | 'invites closed'
+  | 'not friends with leader';
+
+function rpcErrorCode(error: { message?: string } | null): string | undefined {
+  const message = error?.message?.trim();
+  return message && message.length > 0 ? message : undefined;
+}
 
 export type CreateExperienceInput = {
   title: string;
@@ -251,6 +266,11 @@ export async function cancelExperience(id: string): Promise<RpcResult> {
   return { ok: true, error: false };
 }
 
+/**
+ * Hard-deletes an experience for everyone. Not used by the product UI —
+ * participants exit via `leaveExperience`; last leave orphans/purges the row.
+ * Kept for admin/internal callers and parity with the RPC surface.
+ */
 export async function deleteExperience(id: string): Promise<RpcResult> {
   const { error } = await supabase.rpc('delete_experience', { p_id: id });
   if (error) return { ok: false, error: true };
@@ -299,16 +319,62 @@ export async function transferExperienceLeadership(
   return { ok: true, error: false };
 }
 
+export type ExperienceBatchSocialFailure = {
+  userId: string;
+  errorCode: string;
+};
+
+export type ExperienceBatchSocialResult = {
+  sent: string[];
+  failures: ExperienceBatchSocialFailure[];
+  /** True when the RPC itself failed (auth, not allowed, etc.). */
+  error: boolean;
+  errorCode?: string;
+};
+
+function mapBatchSocialResult(data: unknown): ExperienceBatchSocialResult {
+  const row = (data ?? {}) as { sent?: unknown; failures?: unknown };
+  const sent = Array.isArray(row.sent)
+    ? row.sent.filter((id): id is string => typeof id === 'string')
+    : [];
+  const failures: ExperienceBatchSocialFailure[] = Array.isArray(row.failures)
+    ? row.failures
+        .map((item) => {
+          const failure = item as { user_id?: unknown; error?: unknown };
+          if (typeof failure.user_id !== 'string' || typeof failure.error !== 'string') {
+            return null;
+          }
+          return { userId: failure.user_id, errorCode: failure.error.trim() };
+        })
+        .filter((item): item is ExperienceBatchSocialFailure => item !== null)
+    : [];
+  return { sent, failures, error: false };
+}
+
 export async function sendExperienceInvitation(
   experienceId: string,
   inviteeId: string,
-): Promise<{ data: string | null; error: boolean }> {
+): Promise<{ data: string | null; error: boolean; errorCode?: string }> {
   const { data, error } = await supabase.rpc('send_experience_invitation', {
     p_experience_id: experienceId,
     p_invitee_id: inviteeId,
   });
-  if (error) return { data: null, error: true };
+  if (error) return { data: null, error: true, errorCode: rpcErrorCode(error) };
   return { data: (data as string | null) ?? null, error: false };
+}
+
+export async function sendExperienceInvitations(
+  experienceId: string,
+  inviteeIds: string[],
+): Promise<ExperienceBatchSocialResult> {
+  const { data, error } = await supabase.rpc('send_experience_invitations', {
+    p_experience_id: experienceId,
+    p_invitee_ids: inviteeIds,
+  });
+  if (error) {
+    return { sent: [], failures: [], error: true, errorCode: rpcErrorCode(error) };
+  }
+  return mapBatchSocialResult(data);
 }
 
 export async function acceptExperienceInvitation(invitationId: string): Promise<RpcResult> {
@@ -330,13 +396,27 @@ export async function declineExperienceInvitation(invitationId: string): Promise
 export async function suggestExperienceInvite(
   experienceId: string,
   suggestedUserId: string,
-): Promise<{ data: string | null; error: boolean }> {
+): Promise<{ data: string | null; error: boolean; errorCode?: string }> {
   const { data, error } = await supabase.rpc('suggest_experience_invite', {
     p_experience_id: experienceId,
     p_suggested_user_id: suggestedUserId,
   });
-  if (error) return { data: null, error: true };
+  if (error) return { data: null, error: true, errorCode: rpcErrorCode(error) };
   return { data: (data as string | null) ?? null, error: false };
+}
+
+export async function suggestExperienceInvites(
+  experienceId: string,
+  suggestedUserIds: string[],
+): Promise<ExperienceBatchSocialResult> {
+  const { data, error } = await supabase.rpc('suggest_experience_invites', {
+    p_experience_id: experienceId,
+    p_suggested_user_ids: suggestedUserIds,
+  });
+  if (error) {
+    return { sent: [], failures: [], error: true, errorCode: rpcErrorCode(error) };
+  }
+  return mapBatchSocialResult(data);
 }
 
 export async function reviewExperienceInviteSuggestion(
@@ -347,7 +427,25 @@ export async function reviewExperienceInviteSuggestion(
     p_suggestion_id: suggestionId,
     p_approve: approve,
   });
-  if (error) return { ok: false, error: true };
+  if (error) return { ok: false, error: true, errorCode: rpcErrorCode(error) };
+  return { ok: true, error: false };
+}
+
+export async function withdrawExperienceInvitation(invitationId: string): Promise<RpcResult> {
+  const { error } = await supabase.rpc('withdraw_experience_invitation', {
+    p_invitation_id: invitationId,
+  });
+  if (error) return { ok: false, error: true, errorCode: rpcErrorCode(error) };
+  return { ok: true, error: false };
+}
+
+export async function withdrawExperienceInviteSuggestion(
+  suggestionId: string,
+): Promise<RpcResult> {
+  const { error } = await supabase.rpc('withdraw_experience_invite_suggestion', {
+    p_suggestion_id: suggestionId,
+  });
+  if (error) return { ok: false, error: true, errorCode: rpcErrorCode(error) };
   return { ok: true, error: false };
 }
 

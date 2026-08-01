@@ -67,7 +67,6 @@ export const es: Record<TranslationKey, string> = {
   'experiences.detail.endedNotice': 'Convirtiéndose en recuerdo…',
   'experiences.detail.edit': 'Editar plan',
   'experiences.detail.cancelPlan': 'Cancelar plan',
-  'experiences.detail.remove': 'Quitar plan',
 
   'experiences.cancelConfirm.title': '¿Cancelar este plan?',
   'experiences.cancelConfirm.message':
@@ -75,17 +74,10 @@ export const es: Record<TranslationKey, string> = {
   'experiences.cancelConfirm.confirm': 'Cancelar plan',
   'experiences.cancelConfirm.keep': 'Conservar plan',
 
-  'experiences.removeConfirm.title': '¿Quitar este plan?',
-  'experiences.removeConfirm.message':
-    'Esto quita el plan de tu Kairos. Ya no lo verás en tus planes.',
-  'experiences.removeConfirm.confirm': 'Quitar plan',
-  'experiences.removeConfirm.keep': 'Conservar plan',
-
   'experiences.error.create': 'No se pudo crear tu plan. Por favor, inténtalo de nuevo.',
   'experiences.error.update': 'No se pudo actualizar tu plan. Por favor, inténtalo de nuevo.',
   'experiences.error.load': 'No se pudo cargar este plan. Por favor, inténtalo de nuevo.',
   'experiences.error.cancel': 'No se pudo cancelar este plan. Por favor, inténtalo de nuevo.',
-  'experiences.error.remove': 'No se pudo quitar este plan. Por favor, inténtalo de nuevo.',
   'experiences.error.invalidDates': 'La hora de fin debe ser posterior al inicio.',
   'experiences.error.startsInPast':
     'La hora de inicio debe ser al menos 10 minutos desde ahora. Los momentos pasados son Recuerdos.',
@@ -111,10 +103,15 @@ export const es: Record<TranslationKey, string> = {
     'Ya no formarás parte de este plan. Seguirá activo para los demás.',
   'experiences.leaveConfirm.confirm': 'Salir del plan',
   'experiences.leaveConfirm.cancel': 'Cancelar',
-  'experiences.leaveConfirm.leaderMustTransferTitle': 'No puedes salir mientras eres el líder',
-  'experiences.leaveConfirm.leaderMustTransferMessage':
-    'No puedes salir de este plan mientras eres el líder. Primero transfiere el liderazgo con el menú ⋮ de otro participante y después podrás salir.',
-  'experiences.leaveConfirm.leaderMustTransferOk': 'OK',
+  'experiences.leaveConfirm.lastParticipantTitle': '¿Salir y eliminar este plan?',
+  'experiences.leaveConfirm.lastParticipantMessage':
+    'Eres el único participante que queda. Si sales, este plan se eliminará permanentemente para todos.',
+  'experiences.leaveConfirm.lastParticipantConfirm': 'Salir y eliminar',
+  'experiences.leaveConfirm.chooseLeaderTitle': '¿Quién debería ser el nuevo líder?',
+  'experiences.leaveConfirm.chooseLeaderMessage':
+    'Elige a alguien que tome el relevo antes de salir. El plan seguirá activo para los demás.',
+  'experiences.leaveConfirm.chooseLeaderConfirm': 'Salir y transferir',
+  'experiences.leaveConfirm.hideChooser': 'Ahora no',
 
   'experiences.reviveConfirm.title': '¿Reactivar este plan?',
   'experiences.reviveConfirm.message':
@@ -147,11 +144,18 @@ export const es: Record<TranslationKey, string> = {
   'experiences.invites.friendsLoadError': 'No se pudieron cargar tus amigos.',
   'experiences.invites.noFriends': 'Agrega amigos para invitarlos a planes.',
   'experiences.invites.noFriendsAvailable': 'No hay amigos disponibles para invitar aquí.',
-  'experiences.invites.inviteFriend': 'Invitar a un amigo',
+  'experiences.invites.inviteFriend': 'Invitar amigos',
   'experiences.invites.hidePicker': 'Ocultar lista de amigos',
-  'experiences.invites.send': 'Enviar invitación',
+  'experiences.invites.send.one': 'Enviar invitación',
+  'experiences.invites.send.other': 'Enviar invitaciones',
   'experiences.invites.pendingTitle': 'Invitaciones pendientes',
   'experiences.invites.pendingStatus': 'Esperando respuesta',
+  'experiences.invites.withdraw': 'Retirar',
+  'experiences.invites.withdrawConfirm.title': '¿Retirar invitación?',
+  'experiences.invites.withdrawConfirm.message':
+    '{{name}} ya no podrá aceptar esta invitación.',
+  'experiences.invites.withdrawConfirm.confirm': 'Retirar',
+  'experiences.invites.withdrawConfirm.cancel': 'Mantener',
   'experiences.detail.invitationNotice':
     'Has sido invitado a este plan. Acepta para unirte o rechaza para descartarlo.',
   'experiences.detail.invitationAcceptError':
@@ -159,12 +163,14 @@ export const es: Record<TranslationKey, string> = {
   'experiences.detail.invitationDeclineError':
     'No se pudo rechazar la invitación. Por favor, inténtalo de nuevo.',
 
-  'experiences.suggestions.suggestFriend': 'Sugerir un amigo',
-  'experiences.suggestions.submit': 'Enviar sugerencia',
+  'experiences.suggestions.suggestFriend': 'Sugerir amigos',
+  'experiences.suggestions.submit.one': 'Enviar sugerencia',
+  'experiences.suggestions.submit.other': 'Enviar sugerencias',
   'experiences.suggestions.pendingTitle': 'Invitaciones sugeridas',
   'experiences.suggestions.row': '{{suggester}} sugirió a {{friend}}',
   'experiences.suggestions.approve': 'Aprobar',
   'experiences.suggestions.reject': 'Rechazar',
+  'experiences.suggestions.withdraw': 'Retirar',
 
   'experiences.notifications.mute': 'Silenciar notificaciones de este plan',
   'experiences.notifications.unmute': 'Activar notificaciones de este plan',
@@ -200,7 +206,35 @@ export const es: Record<TranslationKey, string> = {
   'experiences.error.transfer': 'No se pudo transferir el liderazgo. Por favor, inténtalo de nuevo.',
   'experiences.error.invite': 'No se pudo enviar la invitación. Por favor, inténtalo de nuevo.',
   'experiences.error.suggest': 'No se pudo enviar la sugerencia. Por favor, inténtalo de nuevo.',
+  'experiences.error.suggestPending': 'Ese amigo ya ha sido sugerido.',
+  'experiences.error.invitePending': 'Ese amigo ya tiene una invitación pendiente.',
+  'experiences.error.alreadyParticipant': 'Ese amigo ya está en este plan.',
+  'experiences.error.inviteBlocked':
+    'Ese amigo ha rechazado las invitaciones a este plan tres veces, así que no se le puede invitar de nuevo.',
+  'experiences.error.notFriends': 'Solo puedes invitar o sugerir a amigos aceptados.',
+  'experiences.error.inviteBatchFailed': 'No se pudo invitar a los amigos seleccionados.',
+  'experiences.error.suggestBatchFailed': 'No se pudo sugerir a los amigos seleccionados.',
+  'experiences.error.invitePartial.oneOne':
+    'Se invitó a 1 amigo, pero 1 no pudo ser invitado.',
+  'experiences.error.invitePartial.oneOther':
+    'Se invitó a 1 amigo, pero {{failed}} no pudieron ser invitados.',
+  'experiences.error.invitePartial.otherOne':
+    'Se invitó a {{sent}} amigos, pero 1 no pudo ser invitado.',
+  'experiences.error.invitePartial.otherOther':
+    'Se invitó a {{sent}} amigos, pero {{failed}} no pudieron ser invitados.',
+  'experiences.error.suggestPartial.oneOne':
+    'Se sugirió a 1 amigo, pero 1 no pudo ser sugerido.',
+  'experiences.error.suggestPartial.oneOther':
+    'Se sugirió a 1 amigo, pero {{failed}} no pudieron ser sugeridos.',
+  'experiences.error.suggestPartial.otherOne':
+    'Se sugirió a {{sent}} amigos, pero 1 no pudo ser sugerido.',
+  'experiences.error.suggestPartial.otherOther':
+    'Se sugirió a {{sent}} amigos, pero {{failed}} no pudieron ser sugeridos.',
   'experiences.error.reviewSuggestion': 'No se pudo revisar la sugerencia. Por favor, inténtalo de nuevo.',
+  'experiences.error.reviewSuggestionInvitePending':
+    'Ese amigo ya tiene una invitación pendiente. Descarta esta sugerencia o espera su respuesta.',
+  'experiences.error.withdrawInvite': 'No se pudo retirar la invitación. Por favor, inténtalo de nuevo.',
+  'experiences.error.withdrawSuggestion': 'No se pudo retirar la sugerencia. Por favor, inténtalo de nuevo.',
   'experiences.error.mute': 'No se pudo actualizar las notificaciones. Por favor, inténtalo de nuevo.',
 
   'profile.username.rules.length': '· 3–30 caracteres',

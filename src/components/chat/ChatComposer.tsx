@@ -1,4 +1,14 @@
-import { ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { FontSize, Radius, Spacing, ThemeColors } from '@/constants/theme';
@@ -35,9 +45,34 @@ export function ChatComposer({
   placeholder,
   sendLabel,
 }: Props) {
+  const insets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    // iOS: will* tracks the keyboard animation so padding grows with the lift.
+    // Android: only did* is reliable.
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Keyboard closed: the tab bar already owns the home-indicator inset — only
+  // Spacing.sm, or the composer sits too high. Keyboard open: the keyboard
+  // covers the tab bar, so we must re-apply the safe-area inset or the
+  // composer lands short and overlaps the keyboard (the pre-decomposition
+  // always-on insets.bottom padding was masking this).
+  const paddingBottom = keyboardVisible
+    ? Math.max(insets.bottom, Spacing.sm)
+    : Spacing.sm;
+
   return (
     <View
-      style={[styles.composerRow, { borderTopColor: colors.border }]}
+      style={[styles.composerRow, { borderTopColor: colors.border, paddingBottom }]}
       onStartShouldSetResponder={() => true}
     >
       <View style={[styles.composerShell, { borderColor: colors.border }]}>
@@ -84,11 +119,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.sm,
     paddingTop: 6,
-    // Fixed, not `insets.bottom`-based: this screen sits under the app's
-    // bottom tab bar (still visible here, not hidden for chat), which already
-    // reserves the physical home-indicator inset. Adding `insets.bottom` again
-    // here double-counted that space and pushed the composer up unnecessarily.
-    paddingBottom: Spacing.sm,
   },
   composerShell: {
     flexDirection: 'row',

@@ -366,21 +366,25 @@ Experiences represent **who is currently planning to attend**. Memories represen
 
 | Action | Who | Effect |
 |--------|-----|--------|
-| **Leave** | Any participant | `DELETE` their `experience_participant` row — **no tombstone**, no `left_at` |
-| **Remove** | Leader only | Same as leave — hard-delete participant row (moderation; toxic participant) |
+| **Leave** | Any participant | `DELETE` their `experience_participant` row — **no tombstone**, no `left_at`. Active leader with others remaining must choose a successor in the same flow (`leave_experience` + `p_new_organizer_id`). |
+| **Remove participant** | Leader only | Hard-delete another participant’s row (moderation; toxic participant) — not the same as leaving |
 | **Cancel** | Leader only (planned) | `status = cancelled`, set `cancelled_at` + `purge_at`; plan stays visible to participants until purge window |
-| **Delete** | Leader only (planned) | Hard-delete experience for **everyone** (destructive; distinct UX copy from cancel) |
 | **Revive** | Any active participant | `cancelled` → `planned` if **`starts_at > now()`**; reviver becomes `organizer_id` |
 
-**Cancelled plans (permission model):** `organizer_id` stays in the DB for history, but there is **no active leader** until someone revives. While cancelled, participants only see **Revive** (when eligible) and **Leave** — no delete, transfer, remove, invite, or edit leader actions.
+**No product “Delete / Remove plan” action:** Participants exit only via **Leave**. The experience continues while anyone remains. When the **last** participant leaves, the server orphans and deletes the experience (`purge_experience_if_orphaned`). A `delete_experience` RPC may still exist for internal/admin use, but it is **not** exposed in the app UI — wording like “Remove plan” previously understated a hard-delete-for-everyone action and duplicated Leave + orphan purge.
+
+**Leave UX (locked):**
+- Non-leader → confirm Leave → leave.
+- Active leader with others → choose successor → leave + transfer in one action.
+- Last participant (including solo leader) → confirm that leaving **permanently deletes** the plan → leave → orphan purge.
+
+**Cancelled plans (permission model):** `organizer_id` stays in the DB for history, but there is **no active leader** until someone revives. While cancelled, participants only see **Revive** (when eligible) and **Leave** — no transfer, remove-participant, invite, or edit leader actions.
 
 **Revive rule (locked):** If `starts_at` has already passed, **do not show Revive** and do not offer a date picker during revive. The moment’s scheduling window is gone — keep the flow simple.
 
 **Last participant gone:** `DELETE` experience row (same as solo M12 when the only person leaves).
 
-**Cancel vs delete UX:** Both are leader-only while the plan is **planned**. Copy must make clear that **cancel** keeps the plan visible and revivable (when dates allow); **delete** permanently removes it for all participants. Once cancelled, delete is not offered — participants wait out the purge window or leave individually.
-
-**M12 “Remove” (solo):** Maps to **Leave** when the user is a participant. When solo organizer removes the plan entirely, that is **Delete** (or leave as last participant → experience purged).
+**Cancel vs Leave:** **Cancel** means “this isn’t happening” but keeps the plan visible/revivable (when dates allow). **Leave** means “I’m out” — and only deletes the entity when nobody remains.
 
 **Invitations:** Only **accepted** invitees become `experience_participants`. Pending/declined invitations never appear in the participant list.
 
@@ -448,7 +452,7 @@ Two roles on experiences:
 | Field | Purpose | Mutable? | Visible to users? |
 |-------|---------|----------|-------------------|
 | **`created_by`** | Who originally created the row | **Never** | **No** — technical/audit metadata only |
-| **`organizer_id`** | Who can edit (per policy), cancel, delete, invite, approve suggestions, remove participants, transfer leadership | **Yes** (M14+) | **Yes** — UI label **Leader** |
+| **`organizer_id`** | Who can edit (per policy), cancel, invite, approve suggestions, remove participants, transfer leadership | **Yes** (M14+) | **Yes** — UI label **Leader** |
 
 On create (M12/M14): `organizer_id := created_by`. Creator is always the first accepted participant row.
 
@@ -709,7 +713,7 @@ Audit every relationship. **Do not blindly CASCADE profile references on shared 
 
 **M15 child tables:** `experience_messages`, `experience_message_reactions` — CASCADE from `experiences(id)` (and messages → reactions).
 
-Entity delete = `DELETE experiences` row (leader delete, last participant leave, transform, or purge cron).
+Entity delete = `DELETE experiences` row (last participant leave / orphan purge, transform, cancel purge cron, or non-UI `delete_experience` RPC).
 
 #### `experience_participants` (M14)
 
@@ -1216,8 +1220,10 @@ notifications  (M14 foundation)
 | When | On create **and** after create, only while `now() < starts_at` |
 | Direct invite (private) | Invitee must be **leader’s friend** (accepted) |
 | On create | Creator may batch-invite friends only |
+| After create | Leader may batch-invite friends (best-effort: successes commit, per-friend failures reported) |
 | Accept | Creates `experience_participant` row |
 | Decline | No participant row; increment per-experience decline count |
+| Withdraw | Leader may withdraw a **pending** invitation (DELETE + purge invitee’s received notification). Does **not** count as a decline |
 | After 3 declines | Block further invites to that user **for that experience only** |
 | Cancelled experience | Expire/reject pending invites; no new invites until **revived** |
 | Status | Only `planned` experiences accept invites |
@@ -1230,9 +1236,15 @@ Philosophy mirrors **friend requests**: pending state is temporary; declining do
 |------|------|
 | Who suggests | Any **accepted participant**, after creation, before `starts_at` |
 | Suggested user | Must be **suggester’s friend** (accepted) — enables inviting non-leader friends after leader approval |
+| Batch | Participants may suggest multiple friends at once (best-effort, same as invites) |
+| Not suggestable | Already a participant; already has a **pending invitation**; already has a **pending suggestion** |
 | Leader | Approves or rejects suggestion |
-| If approved | System creates normal `experience_invitation`; invitee must still **accept** |
-| Direct invite | Leader only; leader’s friends only (private) |
+| If approved | System creates normal `experience_invitation` and **deletes** the suggestion row; invitee must still **accept** |
+| Author withdraw | Suggester may withdraw their own **pending** suggestion (DELETE + purge leader’s received notification). Silent — suggested friend was never contacted |
+| Direct invite | Leader only; leader’s friends only (private). Creating an invitation also clears any pending suggestion for that invitee |
+| Visibility | **All accepted participants** see pending invitations and pending suggestions; only the leader can approve/reject; authors can withdraw their own suggestions |
+| Leadership transfer | Pending suggestions authored by the **new** leader auto-resolve (convert to invitation when possible, otherwise drop) — a leader should not review their own former suggestions |
+| Author leaves / is removed | That author’s **pending suggestions** are deleted (silent). Pending **invitations** are unchanged — they belong to the experience / invitee |
 
 **Rejected complexity:** Participant sending invite without leader approval — always goes through suggestion when inviter is not leader or target is not leader’s friend.
 
@@ -1242,7 +1254,7 @@ Same enum as memories: `edit_info_policy` on `experiences`. **`chat_policy`** (M
 
 - **`all_participants`:** any accepted participant may edit title, description, location (via RPC + optional `expected_updated_at`).
 - **`leader_only`:** only `organizer_id`.
-- **Not governed by policy:** cancel, delete, revive, invite, suggest, remove participant, leadership transfer.
+- **Not governed by policy:** cancel, revive, invite, suggest, remove participant, leadership transfer, leave.
 
 Default for new private plans: `all_participants` (match memory default).
 
@@ -1259,7 +1271,7 @@ UI label **Leader**; DB field `organizer_id` (experiences) / `leader_id` (memori
 
 Invariant: leader must always be an active accepted participant.
 
-## Cancel / delete / revive
+## Cancel / leave / revive
 
 See **Experience lifecycle (M14 — locked)** above.
 
@@ -1267,7 +1279,7 @@ On **cancel:** set `purge_at` from `ends_at + 24h`; clear pending invites.
 
 On **revive:** require `starts_at > now()`; set `status = planned`; clear cancel fields; assign `organizer_id := reviver`.
 
-On **delete:** hard-delete experience and all child rows for all participants.
+On **last-participant leave:** `purge_experience_if_orphaned` hard-deletes the experience and all child rows. There is no product UI for leader hard-delete.
 
 ## Transform to memory (M14 changes)
 
@@ -1309,6 +1321,7 @@ Insert a notification row when the event occurs **unless** the recipient has mut
 | `experience_invitation_accepted` | Leader + inviter (if different) | Yes |
 | `experience_invitation_declined` | Leader (+ inviter if different) | Yes — low volume |
 | `experience_invite_blocked` | Inviter | **No** — RPC returns clear error |
+| Invitation withdrawn / plan cancelled | Invitee | **No** — purge `experience_invitation_received`; invitee opening a stale invite sees “no longer available” when push exists |
 
 #### Experiences — suggestions
 
@@ -1317,6 +1330,7 @@ Insert a notification row when the event occurs **unless** the recipient has mut
 | `experience_invite_suggestion_received` | Leader | Yes |
 | `experience_invite_suggestion_approved` | Suggester | Yes |
 | `experience_invite_suggestion_rejected` | Suggester | Yes |
+| Suggestion withdrawn | Leader | **No** — purge `experience_invite_suggestion_received` for that suggestion |
 
 #### Experiences — participation & lifecycle
 
@@ -1391,7 +1405,7 @@ Add **`handle_profile_delete_experiences`** (mirror memory handler pattern).
 
 **Reads (DEFINER — cross-role gating):** `list_experience_participants`, `list_experience_invitations`, `list_experience_invite_suggestions`.
 
-**Writes (SECURITY DEFINER):** `create_experience`, `update_experience`, `cancel_experience`, `delete_experience`, `revive_experience`, `leave_experience`, `remove_experience_participant`, `transfer_experience_leadership`, `send_experience_invitation`, `accept_experience_invitation`, `decline_experience_invitation`, `suggest_experience_invite`, `review_experience_invite_suggestion`, `set_experience_notifications_muted`, `set_memory_notifications_muted`, `purge_my_stale_experiences`, plus existing memory write RPCs.
+**Writes (SECURITY DEFINER):** `create_experience`, `update_experience`, `cancel_experience`, `delete_experience`, `revive_experience`, `leave_experience`, `remove_experience_participant`, `transfer_experience_leadership`, `send_experience_invitation`, `send_experience_invitations`, `accept_experience_invitation`, `decline_experience_invitation`, `withdraw_experience_invitation`, `suggest_experience_invite`, `suggest_experience_invites`, `review_experience_invite_suggestion`, `withdraw_experience_invite_suggestion`, `set_experience_notifications_muted`, `set_memory_notifications_muted`, `purge_my_stale_experiences`, plus existing memory write RPCs.
 
 **Internal / cron (not client-granted):** `transform_experience_to_memory`, `transform_due_experiences`, `transform_my_due_experiences`, `purge_stale_experiences`, profile-delete triggers, notification enqueue helpers, `trim_notification_inbox`, `maintain_notification_retention`.
 

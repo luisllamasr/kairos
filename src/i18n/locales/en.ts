@@ -65,7 +65,6 @@ export const en = {
   'experiences.detail.endedNotice': 'Becoming a memory…',
   'experiences.detail.edit': 'Edit plan',
   'experiences.detail.cancelPlan': 'Cancel plan',
-  'experiences.detail.remove': 'Remove plan',
 
   'experiences.cancelConfirm.title': 'Cancel this plan?',
   'experiences.cancelConfirm.message':
@@ -73,17 +72,10 @@ export const en = {
   'experiences.cancelConfirm.confirm': 'Cancel plan',
   'experiences.cancelConfirm.keep': 'Keep plan',
 
-  'experiences.removeConfirm.title': 'Remove this plan?',
-  'experiences.removeConfirm.message':
-    'This removes the plan from your Kairos. You will not see it in your plans anymore.',
-  'experiences.removeConfirm.confirm': 'Remove plan',
-  'experiences.removeConfirm.keep': 'Keep plan',
-
   'experiences.error.create': 'Could not create your plan. Please try again.',
   'experiences.error.update': 'Could not update your plan. Please try again.',
   'experiences.error.load': 'Could not load this plan. Please try again.',
   'experiences.error.cancel': 'Could not cancel this plan. Please try again.',
-  'experiences.error.remove': 'Could not remove this plan. Please try again.',
   'experiences.error.invalidDates': 'End must be after start.',
   'experiences.error.startsInPast':
     'Start time must be at least 10 minutes from now. Past moments belong in Memories.',
@@ -109,10 +101,15 @@ export const en = {
     'You will no longer be part of this plan. It stays active for everyone else.',
   'experiences.leaveConfirm.confirm': 'Leave plan',
   'experiences.leaveConfirm.cancel': 'Cancel',
-  'experiences.leaveConfirm.leaderMustTransferTitle': "Can't leave while you're the leader",
-  'experiences.leaveConfirm.leaderMustTransferMessage':
-    "You can't leave this plan while you are the leader. Transfer leadership using the ⋮ menu on another participant first, then you can leave.",
-  'experiences.leaveConfirm.leaderMustTransferOk': 'OK',
+  'experiences.leaveConfirm.lastParticipantTitle': 'Leave and delete this plan?',
+  'experiences.leaveConfirm.lastParticipantMessage':
+    'You are the only participant left. Leaving will permanently delete this plan for everyone.',
+  'experiences.leaveConfirm.lastParticipantConfirm': 'Leave and delete',
+  'experiences.leaveConfirm.chooseLeaderTitle': 'Who should become the new leader?',
+  'experiences.leaveConfirm.chooseLeaderMessage':
+    'Choose someone to take over before you leave. The plan stays active for everyone else.',
+  'experiences.leaveConfirm.chooseLeaderConfirm': 'Leave and transfer',
+  'experiences.leaveConfirm.hideChooser': 'Not now',
 
   'experiences.reviveConfirm.title': 'Revive this plan?',
   'experiences.reviveConfirm.message':
@@ -145,11 +142,18 @@ export const en = {
   'experiences.invites.friendsLoadError': 'Could not load your friends.',
   'experiences.invites.noFriends': 'Add friends to invite them to plans.',
   'experiences.invites.noFriendsAvailable': 'No friends available to invite here.',
-  'experiences.invites.inviteFriend': 'Invite a friend',
+  'experiences.invites.inviteFriend': 'Invite friends',
   'experiences.invites.hidePicker': 'Hide friend list',
-  'experiences.invites.send': 'Send invitation',
+  'experiences.invites.send.one': 'Send invitation',
+  'experiences.invites.send.other': 'Send invitations',
   'experiences.invites.pendingTitle': 'Pending invitations',
   'experiences.invites.pendingStatus': 'Waiting for response',
+  'experiences.invites.withdraw': 'Withdraw',
+  'experiences.invites.withdrawConfirm.title': 'Withdraw invitation?',
+  'experiences.invites.withdrawConfirm.message':
+    '{{name}} will no longer be able to accept this invitation.',
+  'experiences.invites.withdrawConfirm.confirm': 'Withdraw',
+  'experiences.invites.withdrawConfirm.cancel': 'Keep',
   'experiences.detail.invitationNotice':
     'You have been invited to this plan. Accept to join or decline to dismiss.',
   'experiences.detail.invitationAcceptError':
@@ -157,12 +161,14 @@ export const en = {
   'experiences.detail.invitationDeclineError':
     'Could not decline this invitation. Please try again.',
 
-  'experiences.suggestions.suggestFriend': 'Suggest a friend',
-  'experiences.suggestions.submit': 'Send suggestion',
+  'experiences.suggestions.suggestFriend': 'Suggest friends',
+  'experiences.suggestions.submit.one': 'Send suggestion',
+  'experiences.suggestions.submit.other': 'Send suggestions',
   'experiences.suggestions.pendingTitle': 'Suggested invites',
   'experiences.suggestions.row': '{{suggester}} suggested {{friend}}',
   'experiences.suggestions.approve': 'Approve',
   'experiences.suggestions.reject': 'Reject',
+  'experiences.suggestions.withdraw': 'Withdraw',
 
   'experiences.notifications.mute': 'Mute notifications for this plan',
   'experiences.notifications.unmute': 'Unmute notifications for this plan',
@@ -198,7 +204,36 @@ export const en = {
   'experiences.error.transfer': 'Could not transfer leadership. Please try again.',
   'experiences.error.invite': 'Could not send this invitation. Please try again.',
   'experiences.error.suggest': 'Could not send this suggestion. Please try again.',
+  'experiences.error.suggestPending': 'That friend has already been suggested.',
+  'experiences.error.invitePending': 'That friend already has a pending invitation.',
+  'experiences.error.alreadyParticipant': 'That friend is already in this plan.',
+  'experiences.error.inviteBlocked':
+    "That friend has declined invitations to this plan three times, so they can't be invited again.",
+  'experiences.error.notFriends': 'You can only invite or suggest accepted friends.',
+  'experiences.error.inviteBatchFailed': 'Could not invite the selected friends.',
+  'experiences.error.suggestBatchFailed': 'Could not suggest the selected friends.',
+  // Four variants: sent one/other × failed one/other (two counts; tn() only handles one).
+  'experiences.error.invitePartial.oneOne':
+    '1 friend was invited, but 1 could not be invited.',
+  'experiences.error.invitePartial.oneOther':
+    '1 friend was invited, but {{failed}} could not be invited.',
+  'experiences.error.invitePartial.otherOne':
+    '{{sent}} friends were invited, but 1 could not be invited.',
+  'experiences.error.invitePartial.otherOther':
+    '{{sent}} friends were invited, but {{failed}} could not be invited.',
+  'experiences.error.suggestPartial.oneOne':
+    '1 friend was suggested, but 1 could not be suggested.',
+  'experiences.error.suggestPartial.oneOther':
+    '1 friend was suggested, but {{failed}} could not be suggested.',
+  'experiences.error.suggestPartial.otherOne':
+    '{{sent}} friends were suggested, but 1 could not be suggested.',
+  'experiences.error.suggestPartial.otherOther':
+    '{{sent}} friends were suggested, but {{failed}} could not be suggested.',
   'experiences.error.reviewSuggestion': 'Could not review this suggestion. Please try again.',
+  'experiences.error.reviewSuggestionInvitePending':
+    'That friend already has a pending invitation. Dismiss this suggestion or wait for them to respond.',
+  'experiences.error.withdrawInvite': 'Could not withdraw this invitation. Please try again.',
+  'experiences.error.withdrawSuggestion': 'Could not withdraw this suggestion. Please try again.',
   'experiences.error.mute': 'Could not update notification settings. Please try again.',
 
   // Rules describe the field constraints — shared between onboarding and edit profile.

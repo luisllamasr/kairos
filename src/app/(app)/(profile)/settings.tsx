@@ -6,6 +6,7 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 
@@ -13,6 +14,7 @@ export default function SettingsScreen() {
   const { signOutAccount } = useAuth();
   const { t } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   async function handleSignOut() {
     await signOutAccount();
@@ -37,12 +39,12 @@ export default function SettingsScreen() {
       <View style={styles.links}>
         <SettingsLink
           label={t('profile.switchAccount')}
-          onPress={() => router.push('/(app)/(profile)/switch-account')}
+          onPress={() => push('/(app)/(profile)/switch-account')}
         />
         <SettingsLink label={t('profile.signOut')} onPress={() => void handleSignOut()} />
         <SettingsLink
           label={t('profile.deleteAccount')}
-          onPress={() => router.push('/(app)/(profile)/delete-account')}
+          onPress={() => push('/(app)/(profile)/delete-account')}
           destructive
         />
       </View>

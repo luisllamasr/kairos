@@ -10,6 +10,7 @@ import { Text } from '@/components/Text';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import {
@@ -24,6 +25,7 @@ const EDGES = TAB_SAFE_AREA_EDGES;
 export default function ExperienceInvitationsScreen() {
   const { t, locale } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [invitations, setInvitations] = useState<IncomingExperienceInvitation[]>([]);
   const [error, setError] = useState(false);
@@ -72,7 +74,7 @@ export default function ExperienceInvitationsScreen() {
             onAccept={() => void runAccept(item)}
             onDecline={() => void runDecline(item)}
             onPressExperience={() =>
-              router.push({
+              push({
                 pathname: '/(app)/(home)/[id]',
                 params: { id: item.experience_id },
               })

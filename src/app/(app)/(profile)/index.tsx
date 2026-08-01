@@ -1,5 +1,4 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -13,6 +12,7 @@ import { TAB_SCREEN_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { countMyFriends, listIncomingFriendRequests } from '@/lib/friendships';
@@ -24,6 +24,7 @@ export default function ProfileScreen() {
   const { profile } = useAuth();
   const { t, tn, locale } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [incomingRequestCount, setIncomingRequestCount] = useState(0);
   const [friendCount, setFriendCount] = useState(0);
@@ -68,7 +69,7 @@ export default function ProfileScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('settings.open')}
-          onPress={() => router.push('/(app)/(profile)/settings')}
+          onPress={() => push('/(app)/(profile)/settings')}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
         >
           <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
@@ -97,7 +98,7 @@ export default function ProfileScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/(app)/(profile)/friends')}
+            onPress={() => push('/(app)/(profile)/friends')}
             style={({ pressed }) => [styles.stat, styles.statPressable, pressed && styles.pressed]}
           >
             <Text variant="title">{initialLoading ? '—' : friendCount}</Text>
@@ -107,14 +108,14 @@ export default function ProfileScreen() {
 
         <Button
           label={t('profile.editProfile')}
-          onPress={() => router.push('/(app)/(profile)/edit-profile')}
+          onPress={() => push('/(app)/(profile)/edit-profile')}
           style={styles.editButton}
         />
 
         {incomingRequestCount > 0 ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/(app)/(profile)/friend-requests')}
+            onPress={() => push('/(app)/(profile)/friend-requests')}
             style={({ pressed }) => [styles.requestsLink, pressed && styles.pressed]}
           >
             <Text variant="body" style={{ color: colors.brand }}>
@@ -130,7 +131,7 @@ export default function ProfileScreen() {
           {memories.length > 0 ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push('/(app)/(profile)/memories')}
+              onPress={() => push('/(app)/(profile)/memories')}
               style={({ pressed }) => pressed && styles.pressed}
             >
               <Text variant="caption" style={{ color: colors.brand }}>
@@ -169,7 +170,7 @@ export default function ProfileScreen() {
                 item={item}
                 locale={locale}
                 onPress={() =>
-                  router.push({
+                  push({
                     pathname: '/(app)/(profile)/memories/[id]',
                     params: { id: item.id },
                   })

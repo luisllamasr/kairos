@@ -1,175 +1,75 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { DetailLoadingSlot } from '@/components/DetailLoadingSlot';
-import { ExperienceFriendPicker } from '@/components/ExperienceFriendPicker';
-import { ExperienceParticipantActionsMenu } from '@/components/ExperienceParticipantActionsMenu';
+import { ExperienceActionsFooter } from '@/components/ExperienceActionsFooter';
+import { ExperienceChatEntryCard } from '@/components/ExperienceChatEntryCard';
+import { ExperienceParticipantsSection } from '@/components/ExperienceParticipantsSection';
+import { ExperiencePendingInvitesSection } from '@/components/ExperiencePendingInvitesSection';
+import { ExperiencePendingSuggestionsSection } from '@/components/ExperiencePendingSuggestionsSection';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT } from '@/constants/layout';
-import { FontSize, Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
-import { useFocusRefresh } from '@/hooks/use-focus-refresh';
-import { useTheme } from '@/hooks/use-theme';
+import { useExperienceDetail } from '@/hooks/use-experience-detail';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useI18n } from '@/i18n';
 import { formatExperienceRange } from '@/lib/experience-dates';
+import { ExperienceBatchSocialResult } from '@/lib/experiences';
 import {
-  acceptExperienceInvitation,
-  cancelExperience,
-  declineExperienceInvitation,
-  deleteExperience,
-  getExperience,
-  leaveExperience,
-  listExperienceInvitations,
-  listExperienceInviteSuggestions,
-  listExperienceParticipants,
-  removeExperienceParticipant,
-  reviewExperienceInviteSuggestion,
-  reviveExperience,
-  sendExperienceInvitation,
-  setExperienceNotificationsMuted,
-  suggestExperienceInvite,
-  transferExperienceLeadership,
-} from '@/lib/experiences';
-import { ensureExperienceTransformed } from '@/lib/memories';
-import { getAvatarPublicUrl } from '@/lib/profile';
-import {
-  canCancelExperience,
-  canAccessExperienceChat,
-  canEditExperience,
-  canLeaveExperienceNow,
-  canManageExperienceParticipants,
-  canRemoveExperience,
-  canReviveExperience,
-  Experience,
+  experienceParticipantDisplayName,
   ExperienceInvitation,
   ExperienceInviteSuggestion,
   ExperienceParticipant,
-  experienceParticipantDisplayName,
-  hasActiveExperienceLeader,
-  isExperienceEnded,
-  isExperienceUpcoming,
-  isPendingExperienceInvitee,
 } from '@/types/experience';
 
 export default function ExperienceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
   const { t, locale } = useI18n();
-  const colors = useTheme();
+  const push = useGuardedPush();
   const myUserId = session?.user.id ?? null;
+  const experienceId = typeof id === 'string' ? id : null;
 
-  const [experience, setExperience] = useState<Experience | null>(null);
-  const [participants, setParticipants] = useState<ExperienceParticipant[]>([]);
-  const [invitations, setInvitations] = useState<ExperienceInvitation[]>([]);
-  const [suggestions, setSuggestions] = useState<ExperienceInviteSuggestion[]>([]);
-  const [error, setError] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [showInvitePicker, setShowInvitePicker] = useState(false);
-  const [showSuggestPicker, setShowSuggestPicker] = useState(false);
-  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const detail = useExperienceDetail(experienceId);
 
   const localeTag = locale === 'es' ? 'es-ES' : 'en-US';
 
-  const excludeFriendIds = useMemo(() => {
-    const ids = new Set(participants.map((p) => p.user_id));
-    invitations
-      .filter((inv) => inv.status === 'pending')
-      .forEach((inv) => ids.add(inv.invitee_id));
-    return Array.from(ids);
-  }, [participants, invitations]);
+  const {
+    experience,
+    participants,
+    contentExperience,
+    initialLoading,
+    error,
+    actionLoading,
+    actionError,
+    upcoming,
+    ended,
+    cancelled,
+    editable,
+    cancellable,
+    manageable,
+    leavable,
+    leaveNeedsSuccessor,
+    leaveDeletesPlan,
+    revivable,
+    invitesOpen,
+    pendingInvitee,
+    isMember,
+    chatAccessible,
+    pendingInvitations,
+    pendingSuggestions,
+    excludeFriendIds,
+  } = detail;
 
-  const pendingSuggestions = suggestions.filter((s) => s.status === 'pending');
-  const pendingInvitations = invitations.filter((inv) => inv.status === 'pending');
-
-  const loadExperience = useCallback(async () => {
-    if (!id || typeof id !== 'string') {
-      setExperience(null);
-      return;
-    }
-
-    setError(false);
-
-    const { data, error: loadError } = await getExperience(id);
-    if (loadError || !data) {
-      setExperience(null);
-      setParticipants([]);
-      setInvitations([]);
-      setSuggestions([]);
-      setError(loadError);
-      return;
-    }
-
-    const ended = isExperienceEnded(data);
-    const cancelled = data.status === 'cancelled';
-
-    if (ended && !cancelled) {
-      const { data: memoryId, error: transformError } = await ensureExperienceTransformed(id);
-      if (memoryId) {
-        router.replace({
-          pathname: '/(app)/(profile)/memories/[id]',
-          params: { id: memoryId },
-        });
-        return;
-      }
-      if (transformError) {
-        setExperience(data);
-        setError(true);
-        return;
-      }
-    }
-
-    const [participantsResult, invitationsResult, suggestionsResult] = await Promise.all([
-      listExperienceParticipants(id),
-      data.am_organizer && data.am_participant && data.status === 'planned'
-        ? listExperienceInvitations(id)
-        : Promise.resolve({ data: [], error: false }),
-      data.am_organizer && data.am_participant && data.status === 'planned'
-        ? listExperienceInviteSuggestions(id)
-        : Promise.resolve({ data: [], error: false }),
-    ]);
-
-    setExperience(data);
-    setParticipants(participantsResult.data);
-    setInvitations(invitationsResult.data);
-    setSuggestions(suggestionsResult.data);
-    setError(participantsResult.error);
-  }, [id]);
-
-  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadExperience);
-
-  useEffect(() => {
-    resetLoaded();
-  }, [id, resetLoaded]);
-
-  const contentExperience = experience?.id === id ? experience : null;
   const showDetailLoader = initialLoading && !contentExperience;
   const showDetailError = !initialLoading && !contentExperience && (error || !experience);
-
-  const upcoming = experience ? isExperienceUpcoming(experience) : false;
-  const ended = experience ? isExperienceEnded(experience) : false;
-  const cancelled = experience?.status === 'cancelled';
-  const removable = experience ? canRemoveExperience(experience) : false;
-  const editable = experience ? canEditExperience(experience) : false;
-  const cancellable = experience ? canCancelExperience(experience) : false;
-  const manageable = experience ? canManageExperienceParticipants(experience) : false;
-  const leavable = experience ? canLeaveExperienceNow(experience, participants.length) : false;
-  const revivable = experience ? canReviveExperience(experience) : false;
-  const invitesOpen = experience ? upcoming && hasActiveExperienceLeader(experience) : false;
-  const pendingInvitee = experience ? isPendingExperienceInvitee(experience) : false;
-  const isMember = experience?.am_participant ?? false;
-  const chatAccessible = experience ? canAccessExperienceChat(experience) : false;
+  const successorCandidates = participants.filter((p) => p.user_id !== myUserId);
 
   function participantLabel(participant: ExperienceParticipant): string {
     return experienceParticipantDisplayName(participant, t('experiences.participants.unknown'));
-  }
-
-  function otherParticipantsExcludingSelf(): ExperienceParticipant[] {
-    return participants.filter((p) => p.user_id !== myUserId);
   }
 
   function handleCancelPress() {
@@ -181,44 +81,14 @@ export default function ExperienceDetailScreen() {
         text: t('experiences.cancelConfirm.confirm'),
         style: 'destructive',
         onPress: () => {
-          void runCancel();
+          void detail.cancel(t('experiences.error.cancel'));
         },
       },
     ]);
   }
 
-  function handleRemovePress() {
+  function handleLeave() {
     if (!experience || actionLoading) return;
-
-    Alert.alert(t('experiences.removeConfirm.title'), t('experiences.removeConfirm.message'), [
-      { text: t('experiences.removeConfirm.keep'), style: 'cancel' },
-      {
-        text: t('experiences.removeConfirm.confirm'),
-        style: 'destructive',
-        onPress: () => {
-          void runRemove();
-        },
-      },
-    ]);
-  }
-
-  function handleLeavePress() {
-    if (!experience || actionLoading) return;
-
-    const successorCandidates = otherParticipantsExcludingSelf();
-
-    if (
-      hasActiveExperienceLeader(experience) &&
-      experience.am_organizer &&
-      successorCandidates.length > 0
-    ) {
-      Alert.alert(
-        t('experiences.leaveConfirm.leaderMustTransferTitle'),
-        t('experiences.leaveConfirm.leaderMustTransferMessage'),
-        [{ text: t('experiences.leaveConfirm.leaderMustTransferOk') }],
-      );
-      return;
-    }
 
     Alert.alert(t('experiences.leaveConfirm.title'), t('experiences.leaveConfirm.message'), [
       { text: t('experiences.leaveConfirm.cancel'), style: 'cancel' },
@@ -226,10 +96,34 @@ export default function ExperienceDetailScreen() {
         text: t('experiences.leaveConfirm.confirm'),
         style: 'destructive',
         onPress: () => {
-          void runLeave();
+          void detail.leave(t('experiences.error.leave'));
         },
       },
     ]);
+  }
+
+  function handleLeaveLastParticipant() {
+    if (!experience || actionLoading) return;
+
+    Alert.alert(
+      t('experiences.leaveConfirm.lastParticipantTitle'),
+      t('experiences.leaveConfirm.lastParticipantMessage'),
+      [
+        { text: t('experiences.leaveConfirm.cancel'), style: 'cancel' },
+        {
+          text: t('experiences.leaveConfirm.lastParticipantConfirm'),
+          style: 'destructive',
+          onPress: () => {
+            void detail.leave(t('experiences.error.leave'));
+          },
+        },
+      ],
+    );
+  }
+
+  function handleLeaveWithSuccessor(successorUserId: string) {
+    if (!experience || actionLoading) return;
+    void detail.leave(t('experiences.error.leave'), successorUserId);
   }
 
   function handleRevivePress() {
@@ -240,7 +134,7 @@ export default function ExperienceDetailScreen() {
       {
         text: t('experiences.reviveConfirm.confirm'),
         onPress: () => {
-          void runRevive();
+          void detail.revive(t('experiences.error.revive'));
         },
       },
     ]);
@@ -258,7 +152,10 @@ export default function ExperienceDetailScreen() {
           text: t('experiences.removeParticipantConfirm.confirm'),
           style: 'destructive',
           onPress: () => {
-            void runRemoveParticipant(participant.user_id);
+            void detail.removeParticipant(
+              participant.user_id,
+              t('experiences.error.removeParticipant'),
+            );
           },
         },
       ],
@@ -276,173 +173,130 @@ export default function ExperienceDetailScreen() {
         {
           text: t('experiences.transferConfirm.confirm'),
           onPress: () => {
-            void runTransfer(participant.user_id);
+            void detail.transferLeadership(participant.user_id, t('experiences.error.transfer'));
           },
         },
       ],
     );
   }
 
-  async function runCancel() {
-    if (!experience) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await cancelExperience(experience.id);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.cancel'));
-      return;
+  function inviteErrorLabel(errorCode?: string): string {
+    switch (errorCode) {
+      case 'invite blocked':
+        return t('experiences.error.inviteBlocked');
+      case 'invite pending':
+        return t('experiences.error.invitePending');
+      case 'already participant':
+        return t('experiences.error.alreadyParticipant');
+      case 'not friends with leader':
+      case 'not friends':
+        return t('experiences.error.notFriends');
+      default:
+        return t('experiences.error.invite');
     }
-    await refresh();
   }
 
-  async function runRemove() {
-    if (!experience) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await deleteExperience(experience.id);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.remove'));
-      return;
+  function suggestErrorLabel(errorCode?: string): string {
+    switch (errorCode) {
+      case 'suggestion pending':
+        return t('experiences.error.suggestPending');
+      case 'invite pending':
+        return t('experiences.error.invitePending');
+      case 'already participant':
+        return t('experiences.error.alreadyParticipant');
+      case 'invite blocked':
+        return t('experiences.error.inviteBlocked');
+      case 'not friends':
+        return t('experiences.error.notFriends');
+      default:
+        return t('experiences.error.suggest');
     }
-    router.replace('/(app)/(home)');
   }
 
-  async function runLeave(newOrganizerId?: string) {
-    if (!experience) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await leaveExperience(experience.id, newOrganizerId);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.leave'));
-      return;
+  function reviewSuggestionErrorLabel(errorCode?: string): string {
+    switch (errorCode) {
+      case 'invite pending':
+        return t('experiences.error.reviewSuggestionInvitePending');
+      case 'invite blocked':
+        return t('experiences.error.inviteBlocked');
+      default:
+        return t('experiences.error.reviewSuggestion');
     }
-    router.replace('/(app)/(home)');
   }
 
-  async function runRevive() {
-    if (!experience) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await reviveExperience(experience.id);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.revive'));
-      return;
+  function formatPartialBatchMessage(
+    kind: 'invite' | 'suggest',
+    sent: number,
+    failed: number,
+  ): string {
+    const params = { sent: String(sent), failed: String(failed) };
+    if (kind === 'invite') {
+      if (sent === 1 && failed === 1) return t('experiences.error.invitePartial.oneOne');
+      if (sent === 1) return t('experiences.error.invitePartial.oneOther', params);
+      if (failed === 1) return t('experiences.error.invitePartial.otherOne', params);
+      return t('experiences.error.invitePartial.otherOther', params);
     }
-    await refresh();
+    if (sent === 1 && failed === 1) return t('experiences.error.suggestPartial.oneOne');
+    if (sent === 1) return t('experiences.error.suggestPartial.oneOther', params);
+    if (failed === 1) return t('experiences.error.suggestPartial.otherOne', params);
+    return t('experiences.error.suggestPartial.otherOther', params);
   }
 
-  async function runRemoveParticipant(userId: string) {
-    if (!experience) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await removeExperienceParticipant(experience.id, userId);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.removeParticipant'));
-      return;
+  function formatInviteBatchError(result: ExperienceBatchSocialResult): string | null {
+    if (result.error) return inviteErrorLabel(result.errorCode);
+    if (result.failures.length === 0) return null;
+    if (result.sent.length === 0 && result.failures.length === 1) {
+      return inviteErrorLabel(result.failures[0]!.errorCode);
     }
-    await refresh();
+    if (result.sent.length === 0) return t('experiences.error.inviteBatchFailed');
+    return formatPartialBatchMessage('invite', result.sent.length, result.failures.length);
   }
 
-  async function runTransfer(newOrganizerId: string) {
-    if (!experience) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await transferExperienceLeadership(experience.id, newOrganizerId);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.transfer'));
-      return;
+  function formatSuggestBatchError(result: ExperienceBatchSocialResult): string | null {
+    if (result.error) return suggestErrorLabel(result.errorCode);
+    if (result.failures.length === 0) return null;
+    if (result.sent.length === 0 && result.failures.length === 1) {
+      return suggestErrorLabel(result.failures[0]!.errorCode);
     }
-    await refresh();
-  }
-
-  async function runSendInvite() {
-    if (!experience || selectedFriendIds.length !== 1) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await sendExperienceInvitation(experience.id, selectedFriendIds[0]!);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.invite'));
-      return;
-    }
-    setSelectedFriendIds([]);
-    setShowInvitePicker(false);
-    await refresh();
-  }
-
-  async function runSuggestInvite() {
-    if (!experience || selectedFriendIds.length !== 1) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await suggestExperienceInvite(experience.id, selectedFriendIds[0]!);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.suggest'));
-      return;
-    }
-    setSelectedFriendIds([]);
-    setShowSuggestPicker(false);
-    await refresh();
+    if (result.sent.length === 0) return t('experiences.error.suggestBatchFailed');
+    return formatPartialBatchMessage('suggest', result.sent.length, result.failures.length);
   }
 
   async function runReviewSuggestion(suggestionId: string, approve: boolean) {
-    setActionLoading(true);
-    setActionError(null);
-    const result = await reviewExperienceInviteSuggestion(suggestionId, approve);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.reviewSuggestion'));
-      return;
-    }
-    await refresh();
+    await detail.reviewSuggestion(suggestionId, approve, reviewSuggestionErrorLabel);
   }
 
-  async function runToggleMute() {
-    if (!experience || !isMember) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await setExperienceNotificationsMuted(
-      experience.id,
-      !experience.notifications_muted,
+  function handleWithdrawInvitationPress(invitation: ExperienceInvitation) {
+    if (actionLoading) return;
+    const name = experienceParticipantDisplayName(
+      invitation,
+      t('experiences.participants.unknown'),
     );
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.error.mute'));
-      return;
-    }
-    await refresh();
+    Alert.alert(
+      t('experiences.invites.withdrawConfirm.title'),
+      t('experiences.invites.withdrawConfirm.message', { name }),
+      [
+        { text: t('experiences.invites.withdrawConfirm.cancel'), style: 'cancel' },
+        {
+          text: t('experiences.invites.withdrawConfirm.confirm'),
+          style: 'destructive',
+          onPress: () => {
+            void detail.withdrawInvitation(
+              invitation.invitation_id,
+              t('experiences.error.withdrawInvite'),
+            );
+          },
+        },
+      ],
+    );
   }
 
-  async function runAcceptInvitation() {
-    if (!experience?.pending_invitation_id) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await acceptExperienceInvitation(experience.pending_invitation_id);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.detail.invitationAcceptError'));
-      return;
-    }
-    await refresh();
-  }
-
-  async function runDeclineInvitation() {
-    if (!experience?.pending_invitation_id) return;
-    setActionLoading(true);
-    setActionError(null);
-    const result = await declineExperienceInvitation(experience.pending_invitation_id);
-    setActionLoading(false);
-    if (result.error) {
-      setActionError(t('experiences.detail.invitationDeclineError'));
-      return;
-    }
-    router.replace('/(app)/(home)/invitations');
+  function handleWithdrawSuggestionPress(suggestion: ExperienceInviteSuggestion) {
+    if (actionLoading) return;
+    void detail.withdrawSuggestion(
+      suggestion.suggestion_id,
+      t('experiences.error.withdrawSuggestion'),
+    );
   }
 
   return (
@@ -461,7 +315,10 @@ export default function ExperienceDetailScreen() {
           <Text variant="error" style={styles.centered}>
             {t('experiences.error.load')}
           </Text>
-          <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
+          <Button
+            label={t('error.retry')}
+            onPress={() => void detail.refresh({ showLoading: true })}
+          />
         </View>
       )}
 
@@ -497,122 +354,82 @@ export default function ExperienceDetailScreen() {
             </Text>
           ) : null}
 
-          {participants.length > 0 ? (
-            <View style={styles.section}>
-              <Text variant="title" style={styles.sectionTitle}>
-                {t('experiences.participants.title')}
-              </Text>
-              {participants.map((participant) => (
-                <View key={participant.participant_id} style={styles.participantRow}>
-                  <Avatar
-                    uri={getAvatarPublicUrl(participant.avatar_url)}
-                    displayName={participantLabel(participant)}
-                    size={40}
-                  />
-                  <View style={styles.participantText}>
-                    <Text variant="body">{participantLabel(participant)}</Text>
-                    {participant.is_organizer && !cancelled ? (
-                      <Text variant="caption">{t('experiences.participants.leader')}</Text>
-                    ) : null}
-                  </View>
-                  {isMember && manageable && !participant.is_organizer && participant.user_id !== myUserId ? (
-                    <ExperienceParticipantActionsMenu
-                      participantName={participantLabel(participant)}
-                      disabled={actionLoading}
-                      onTransfer={() => handleTransferParticipantPress(participant)}
-                      onRemove={() => handleRemoveParticipantPress(participant)}
-                    />
-                  ) : null}
-                </View>
-              ))}
-            </View>
-          ) : null}
+          <ExperienceParticipantsSection
+            participants={participants}
+            cancelled={!!cancelled}
+            showActions={isMember && manageable}
+            myUserId={myUserId}
+            actionLoading={actionLoading}
+            title={t('experiences.participants.title')}
+            leaderLabel={t('experiences.participants.leader')}
+            unknownLabel={t('experiences.participants.unknown')}
+            onTransfer={handleTransferParticipantPress}
+            onRemove={handleRemoveParticipantPress}
+          />
 
           {isMember && chatAccessible ? (
-            <View style={styles.section}>
-              <Text variant="title" style={styles.sectionTitle}>
-                {t('experiences.chat.sectionTitle')}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname: '/(app)/(home)/[id]/chat',
-                    params: { id: contentExperience.id },
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.chatSectionCard,
-                  { borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
-                ]}
-              >
-                <View style={styles.chatSectionText}>
-                  <Text variant="body">{t('experiences.chat.sectionLead')}</Text>
-                  <Text variant="caption">{t('experiences.chat.sectionHint')}</Text>
-                </View>
-                <Text variant="subtitle" style={styles.chatSectionChevron}>
-                  ›
-                </Text>
-              </Pressable>
-            </View>
+            <ExperienceChatEntryCard
+              title={t('experiences.chat.sectionTitle')}
+              lead={t('experiences.chat.sectionLead')}
+              hint={t('experiences.chat.sectionHint')}
+              onPress={() =>
+                push({
+                  pathname: '/(app)/(home)/[id]/chat',
+                  params: { id: contentExperience.id },
+                })
+              }
+            />
           ) : null}
 
-          {manageable && pendingInvitations.length > 0 ? (
-            <View style={styles.section}>
-              <Text variant="title" style={styles.sectionTitle}>
-                {t('experiences.invites.pendingTitle')}
-              </Text>
-              {pendingInvitations.map((invitation) => (
-                <View key={invitation.invitation_id} style={styles.inviteRow}>
-                  <Text variant="body">
-                    {experienceParticipantDisplayName(
-                      invitation,
-                      t('experiences.participants.unknown'),
-                    )}
-                  </Text>
-                  <Text variant="caption">{t('experiences.invites.pendingStatus')}</Text>
-                </View>
-              ))}
-            </View>
+          {isMember ? (
+            <ExperiencePendingInvitesSection
+              invitations={pendingInvitations}
+              title={t('experiences.invites.pendingTitle')}
+              pendingStatusLabel={t('experiences.invites.pendingStatus')}
+              unknownLabel={t('experiences.participants.unknown')}
+              withdrawLabel={t('experiences.invites.withdraw')}
+              canWithdraw={manageable}
+              actionLoading={actionLoading}
+              onWithdraw={(invitationId) => {
+                const invitation = pendingInvitations.find(
+                  (item) => item.invitation_id === invitationId,
+                );
+                if (invitation) handleWithdrawInvitationPress(invitation);
+              }}
+            />
           ) : null}
 
-          {manageable && pendingSuggestions.length > 0 ? (
-            <View style={styles.section}>
-              <Text variant="title" style={styles.sectionTitle}>
-                {t('experiences.suggestions.pendingTitle')}
-              </Text>
-              {pendingSuggestions.map((suggestion) => (
-                <View key={suggestion.suggestion_id} style={styles.suggestionRow}>
-                  <Text variant="body">
-                    {t('experiences.suggestions.row', {
-                      suggester:
-                        suggestion.suggester_display_name ??
-                        suggestion.suggester_username ??
-                        t('experiences.participants.unknown'),
-                      friend:
-                        suggestion.suggested_display_name ??
-                        suggestion.suggested_username ??
-                        t('experiences.participants.unknown'),
-                    })}
-                  </Text>
-                  <View style={styles.suggestionActions}>
-                    <Button
-                      label={t('experiences.suggestions.approve')}
-                      onPress={() => void runReviewSuggestion(suggestion.suggestion_id, true)}
-                      disabled={actionLoading}
-                      style={styles.inlineAction}
-                    />
-                    <Button
-                      label={t('experiences.suggestions.reject')}
-                      variant="secondary"
-                      onPress={() => void runReviewSuggestion(suggestion.suggestion_id, false)}
-                      disabled={actionLoading}
-                      style={styles.inlineAction}
-                    />
-                  </View>
-                </View>
-              ))}
-            </View>
+          {isMember ? (
+            <ExperiencePendingSuggestionsSection
+              suggestions={pendingSuggestions}
+              title={t('experiences.suggestions.pendingTitle')}
+              approveLabel={t('experiences.suggestions.approve')}
+              rejectLabel={t('experiences.suggestions.reject')}
+              withdrawLabel={t('experiences.suggestions.withdraw')}
+              canReview={manageable}
+              myUserId={myUserId}
+              actionLoading={actionLoading}
+              formatRow={(suggestion) =>
+                t('experiences.suggestions.row', {
+                  suggester:
+                    suggestion.suggester_display_name ??
+                    suggestion.suggester_username ??
+                    t('experiences.participants.unknown'),
+                  friend:
+                    suggestion.suggested_display_name ??
+                    suggestion.suggested_username ??
+                    t('experiences.participants.unknown'),
+                })
+              }
+              onApprove={(suggestionId) => void runReviewSuggestion(suggestionId, true)}
+              onReject={(suggestionId) => void runReviewSuggestion(suggestionId, false)}
+              onWithdraw={(suggestionId) => {
+                const suggestion = pendingSuggestions.find(
+                  (item) => item.suggestion_id === suggestionId,
+                );
+                if (suggestion) handleWithdrawSuggestionPress(suggestion);
+              }}
+            />
           ) : null}
 
           {pendingInvitee ? (
@@ -639,150 +456,41 @@ export default function ExperienceDetailScreen() {
             </Text>
           ) : null}
 
-          <View style={styles.actions}>
-            {pendingInvitee ? (
-              <>
-                <Button
-                  label={t('experiences.invites.accept')}
-                  onPress={() => void runAcceptInvitation()}
-                  loading={actionLoading}
-                />
-                <Button
-                  label={t('experiences.invites.decline')}
-                  variant="secondary"
-                  onPress={() => void runDeclineInvitation()}
-                  disabled={actionLoading}
-                />
-              </>
-            ) : null}
-
-            {isMember && editable ? (
-              <Button
-                label={t('experiences.detail.edit')}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(app)/(home)/[id]/edit',
-                    params: { id: contentExperience.id },
-                  })
-                }
-                disabled={actionLoading}
-              />
-            ) : null}
-
-            {isMember && manageable && invitesOpen ? (
-              <>
-                <Button
-                  label={
-                    showInvitePicker
-                      ? t('experiences.invites.hidePicker')
-                      : t('experiences.invites.inviteFriend')
-                  }
-                  variant="secondary"
-                  onPress={() => {
-                    setShowInvitePicker((open) => !open);
-                    setShowSuggestPicker(false);
-                    setSelectedFriendIds([]);
-                  }}
-                  disabled={actionLoading}
-                />
-                {showInvitePicker ? (
-                  <View style={styles.pickerBlock}>
-                    <ExperienceFriendPicker
-                      selectedIds={selectedFriendIds}
-                      onChange={setSelectedFriendIds}
-                      multiple={false}
-                      excludeUserIds={excludeFriendIds}
-                    />
-                    <Button
-                      label={t('experiences.invites.send')}
-                      onPress={() => void runSendInvite()}
-                      loading={actionLoading}
-                      disabled={selectedFriendIds.length !== 1}
-                    />
-                  </View>
-                ) : null}
-              </>
-            ) : null}
-
-            {isMember && !manageable && invitesOpen ? (
-              <>
-                <Button
-                  label={
-                    showSuggestPicker
-                      ? t('experiences.invites.hidePicker')
-                      : t('experiences.suggestions.suggestFriend')
-                  }
-                  variant="secondary"
-                  onPress={() => {
-                    setShowSuggestPicker((open) => !open);
-                    setShowInvitePicker(false);
-                    setSelectedFriendIds([]);
-                  }}
-                  disabled={actionLoading}
-                />
-                {showSuggestPicker ? (
-                  <View style={styles.pickerBlock}>
-                    <ExperienceFriendPicker
-                      selectedIds={selectedFriendIds}
-                      onChange={setSelectedFriendIds}
-                      multiple={false}
-                      excludeUserIds={excludeFriendIds}
-                    />
-                    <Button
-                      label={t('experiences.suggestions.submit')}
-                      onPress={() => void runSuggestInvite()}
-                      loading={actionLoading}
-                      disabled={selectedFriendIds.length !== 1}
-                    />
-                  </View>
-                ) : null}
-              </>
-            ) : null}
-
-            {isMember && !cancelled ? (
-              <Button
-                label={
-                  contentExperience.notifications_muted
-                    ? t('experiences.notifications.unmute')
-                    : t('experiences.notifications.mute')
-                }
-                variant="secondary"
-                onPress={() => void runToggleMute()}
-                disabled={actionLoading}
-              />
-            ) : null}
-
-            {isMember && cancellable ? (
-              <Button
-                label={t('experiences.detail.cancelPlan')}
-                variant="secondary"
-                onPress={handleCancelPress}
-                loading={actionLoading}
-              />
-            ) : null}
-
-            {isMember && leavable ? (
-              <Button
-                label={t('experiences.detail.leave')}
-                variant="secondary"
-                onPress={handleLeavePress}
-                loading={actionLoading}
-              />
-            ) : null}
-
-            {isMember && revivable ? (
-              <Button label={t('experiences.detail.revive')} onPress={handleRevivePress} loading={actionLoading} />
-            ) : null}
-
-            {isMember && removable ? (
-              <Button
-                label={t('experiences.detail.remove')}
-                variant="secondary"
-                onPress={handleRemovePress}
-                disabled={actionLoading}
-              />
-            ) : null}
-          </View>
+          <ExperienceActionsFooter
+            pendingInvitee={!!pendingInvitee}
+            isMember={isMember}
+            editable={editable}
+            manageable={manageable}
+            invitesOpen={invitesOpen}
+            cancelled={!!cancelled}
+            cancellable={cancellable}
+            leavable={leavable}
+            leaveNeedsSuccessor={leaveNeedsSuccessor}
+            leaveDeletesPlan={leaveDeletesPlan}
+            revivable={revivable}
+            notificationsMuted={contentExperience.notifications_muted}
+            actionLoading={actionLoading}
+            excludeFriendIds={excludeFriendIds}
+            successorCandidates={successorCandidates}
+            onAcceptInvitation={() => void detail.acceptInvitation(t('experiences.detail.invitationAcceptError'))}
+            onDeclineInvitation={() => void detail.declineInvitation(t('experiences.detail.invitationDeclineError'))}
+            onEdit={() =>
+              push({
+                pathname: '/(app)/(home)/[id]/edit',
+                params: { id: contentExperience.id },
+              })
+            }
+            onSendInvites={(friendIds) => detail.sendInvites(friendIds, formatInviteBatchError)}
+            onSuggestInvites={(friendIds) =>
+              detail.suggestInvites(friendIds, formatSuggestBatchError)
+            }
+            onToggleMute={() => void detail.toggleMute(t('experiences.error.mute'))}
+            onCancelPress={handleCancelPress}
+            onLeave={handleLeave}
+            onLeaveLastParticipant={handleLeaveLastParticipant}
+            onLeaveWithSuccessor={handleLeaveWithSuccessor}
+            onRevivePress={handleRevivePress}
+          />
         </ScrollView>
       )}
     </Screen>
@@ -793,10 +501,6 @@ const styles = StyleSheet.create({
   backButton: {
     alignSelf: 'flex-start',
     marginBottom: Spacing.lg,
-  },
-  loader: {
-    marginTop: Spacing.xl,
-    alignSelf: 'center',
   },
   stateBlock: {
     flex: 1,
@@ -824,64 +528,11 @@ const styles = StyleSheet.create({
   body: {
     marginBottom: Spacing.sm,
   },
-  section: {
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  sectionTitle: {
-    marginBottom: Spacing.xs,
-  },
-  chatSectionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    borderWidth: 1,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-  },
-  chatSectionText: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  chatSectionChevron: {
-    fontSize: FontSize.xl,
-    lineHeight: FontSize.xl,
-  },
-  participantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  participantText: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  inviteRow: {
-    gap: Spacing.xs,
-  },
-  suggestionRow: {
-    gap: Spacing.sm,
-  },
-  suggestionActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  inlineAction: {
-    alignSelf: 'flex-start',
-  },
-  pickerBlock: {
-    gap: Spacing.sm,
-  },
   notice: {
     marginTop: Spacing.md,
     marginBottom: Spacing.lg,
   },
   actionError: {
     marginBottom: Spacing.sm,
-  },
-  actions: {
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
   },
 });

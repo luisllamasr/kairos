@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
@@ -11,6 +10,7 @@ import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constant
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { listMyHomeExperiences, listIncomingExperienceInvitations, purgeMyStaleExperiences } from '@/lib/experiences';
@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const { t, tn, locale } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [experiences, setExperiences] = useState<ExperienceListItem[]>([]);
   const [invitationCount, setInvitationCount] = useState(0);
@@ -65,7 +66,7 @@ export default function HomeScreen() {
             cancelledLabel={t('experiences.status.cancelled')}
             becomingMemoryLabel={t('experiences.status.becomingMemory')}
             onPress={() =>
-              router.push({
+              push({
                 pathname: '/(app)/(home)/[id]',
                 params: { id: item.id },
               })
@@ -85,7 +86,7 @@ export default function HomeScreen() {
 
             <Button
               label={t('home.newExperience')}
-              onPress={() => router.push('/(app)/(home)/new')}
+              onPress={() => push('/(app)/(home)/new')}
               style={styles.newButton}
             />
 
@@ -94,7 +95,7 @@ export default function HomeScreen() {
                 <Button
                   label={tn('home.invitationsCount.other', invitationCount)}
                   variant="secondary"
-                  onPress={() => router.push('/(app)/(home)/invitations')}
+                  onPress={() => push('/(app)/(home)/invitations')}
                 />
               ) : null}
             </View>

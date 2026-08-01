@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -9,6 +9,7 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useI18n } from '@/i18n';
 import { RememberedAccount } from '@/lib/auth-storage';
 import { otpPending } from '@/lib/otp-pending';
@@ -66,6 +67,7 @@ export default function SignInScreen() {
   const isReauthMode = mode === 'reauth-account';
   const { session, accounts, cancelAddAccount, reauthAccount } = useAuth();
   const { t } = useI18n();
+  const push = useGuardedPush();
 
   const reauthTarget = useMemo(
     () => (isReauthMode && targetUserId ? accounts.find((a) => a.userId === targetUserId) : undefined),
@@ -197,7 +199,7 @@ export default function SignInScreen() {
     }
 
     otpPending.set(trimmed);
-    router.push({ pathname: '/(auth)/verify', params: { email: trimmed } });
+    push({ pathname: '/(auth)/verify', params: { email: trimmed } });
   }
 
   const canShowRememberedLists = !session && !isReauthMode && !isAddAccountMode;

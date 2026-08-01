@@ -11,6 +11,7 @@ import { Text } from '@/components/Text';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { listMyMemories, transformMyDueExperiences } from '@/lib/memories';
@@ -20,6 +21,7 @@ const EDGES = TAB_SAFE_AREA_EDGES;
 export default function MemoriesScreen() {
   const { t, locale } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [memories, setMemories] = useState<Awaited<ReturnType<typeof listMyMemories>>['data']>(
     [],
@@ -53,7 +55,7 @@ export default function MemoriesScreen() {
             item={item}
             locale={locale}
             onPress={() =>
-              router.push({
+              push({
                 pathname: '/(app)/(profile)/memories/[id]',
                 params: { id: item.id },
               })

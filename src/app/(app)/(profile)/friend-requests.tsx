@@ -10,6 +10,7 @@ import { Text } from '@/components/Text';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import {
@@ -24,6 +25,7 @@ const EDGES = TAB_SAFE_AREA_EDGES;
 export default function FriendRequestsScreen() {
   const { t } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [requests, setRequests] = useState<IncomingFriendRequest[]>([]);
   const [error, setError] = useState(false);
@@ -68,7 +70,7 @@ export default function FriendRequestsScreen() {
             onAccept={() => handleAccept(item.username)}
             onDecline={() => handleDecline(item.username)}
             onPressProfile={() =>
-              router.push({
+              push({
                 pathname: '/(app)/(search)/user/[username]',
                 params: { username: item.username },
               })
