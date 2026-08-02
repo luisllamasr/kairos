@@ -57,13 +57,15 @@ export default function SearchScreen() {
     setLoading(true);
     setError(false);
 
-    const timer = setTimeout(async () => {
-      const { data, error: searchError } = await searchProfiles(normalized);
-      if (searchGenerationRef.current !== generation) return;
-      setResults(data);
-      setError(searchError);
-      setLoading(false);
-      setSearched(true);
+    const timer = setTimeout(() => {
+      void (async () => {
+        const { data, error: searchError } = await searchProfiles(normalized);
+        if (searchGenerationRef.current !== generation) return;
+        setResults(data);
+        setError(searchError);
+        setLoading(false);
+        setSearched(true);
+      })();
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);

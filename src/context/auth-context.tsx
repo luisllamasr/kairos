@@ -157,9 +157,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    syncAccounts();
+    void syncAccounts();
 
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+    void supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!mounted) return;
 
       const remembered = await listRememberedAccounts();
@@ -183,11 +183,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthInitialized(true);
       }
       if (newSession) {
-        syncAccounts();
+        void syncAccounts();
       }
     });
 
-    supabase.auth.getUser().then(async ({ error }) => {
+    void supabase.auth.getUser().then(async ({ error }) => {
       if (!mounted) return;
       if (error && 'status' in error) {
         const { data: { session: invalidSession } } = await supabase.auth.getSession();
@@ -274,6 +274,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
+    // Intentionally keyed on user id (not the whole session) so token refreshes
+    // do not re-fetch the profile. sessionRef is used for expiry cleanup below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
   }, [session?.user?.id, authInitialized, syncAccounts]);
 
   const refreshProfile = useCallback(async () => {

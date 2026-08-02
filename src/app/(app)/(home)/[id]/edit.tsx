@@ -40,7 +40,7 @@ export default function EditExperienceScreen() {
     }
   }, [id, t]);
 
-  const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadExperience);
+  const { initialLoading, resetLoaded } = useFocusRefresh(loadExperience);
 
   useEffect(() => {
     resetLoaded();

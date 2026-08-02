@@ -13,7 +13,6 @@ import { useI18n } from '@/i18n';
 export default function SettingsScreen() {
   const { signOutAccount } = useAuth();
   const { t } = useI18n();
-  const colors = useTheme();
   const push = useGuardedPush();
 
   async function handleSignOut() {

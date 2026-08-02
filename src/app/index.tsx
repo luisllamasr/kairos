@@ -1,4 +1,4 @@
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import { useLayoutEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -18,24 +18,16 @@ export default function RootIndex() {
   useLayoutEffect(() => {
     if (loading || routedRef.current) return;
 
-    let href: Href | null = null;
-
     if (!session) {
-      href = '/(auth)/sign-in';
-    } else if (profileError) {
-      return;
-    } else if (profileLoading && !profile) {
-      return;
-    } else if (!profile?.username) {
-      href = '/(onboarding)';
-    } else {
-      href = '/(app)/(home)';
-    }
-
-    if (href) {
       routedRef.current = true;
-      router.replace(href);
+      router.replace('/(auth)/sign-in');
+      return;
     }
+    if (profileError) return;
+    if (profileLoading && !profile) return;
+
+    routedRef.current = true;
+    router.replace(profile?.username ? '/(app)/(home)' : '/(onboarding)');
   }, [loading, session, profile, profileError, profileLoading]);
 
   if (loading) return <BootstrapScreen />;

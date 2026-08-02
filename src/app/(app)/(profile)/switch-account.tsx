@@ -50,14 +50,16 @@ export default function SwitchAccountScreen() {
       {
         text: t('switchAccount.removeFromDevice'),
         style: 'destructive',
-        onPress: async () => {
-          setLoadingUserId(userId);
-          setError(null);
-          try {
-            await forgetAccountOnDevice(userId);
-          } finally {
-            setLoadingUserId(null);
-          }
+        onPress: () => {
+          void (async () => {
+            setLoadingUserId(userId);
+            setError(null);
+            try {
+              await forgetAccountOnDevice(userId);
+            } finally {
+              setLoadingUserId(null);
+            }
+          })();
         },
       },
     ]);

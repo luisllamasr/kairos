@@ -62,7 +62,9 @@ export function ExperienceFriendPicker({
       friends.filter(
         (friend) => friend.user_id && !excludeUserIds.includes(friend.user_id),
       ),
-    // excludeKey tracks excludeUserIds content without refetching on new array identity.
+    // excludeKey fingerprints excludeUserIds content so a new array identity
+    // with the same ids does not recompute the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see excludeKey above
     [friends, excludeKey],
   );
 
