@@ -173,9 +173,9 @@ Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
 # Current status
 
 Phase:
-Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, **M14 shared experiences**, and **M15 Experience chat** complete. Currently running a production-readiness architecture/security audit and hardening pass (see `docs/SECURITY.md`) before public launch — no new product features during this phase.
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, **M14 shared experiences**, and **M15 Experience chat** complete. **Production-readiness architecture/security hardening audit: complete** — closing report in `docs/HARDENING_AUDIT.md` (see also `docs/SECURITY.md`). Feature development may resume; remaining launch-prep items (a11y, env split, Sentry, EAS, password rotation) are intentionally deferred — see that report.
 
-**Next major feature after hardening completes:** Settings & Privacy — the layered profile visibility model described in **Core principles → 6. Privacy and profile visibility**. Do not build an intermediate/partial version of this before then.
+**Next major feature:** Settings & Privacy — the layered profile visibility model described in **Core principles → 6. Privacy and profile visibility**. Do not build an intermediate/partial version of this before then.
 
 Created by:
 Luis Llamas Ramón
@@ -892,7 +892,7 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Production-readiness hardening** — architecture/security audit findings being addressed slice by slice before public launch (see `docs/SECURITY.md`). **Milestone 15 — Experience chat** (below) is complete. **Settings & Privacy** (see Core principles → 6. Privacy and profile visibility) is the next major feature once hardening completes.
+**Feature development resumed after hardening.** Closing report: `docs/HARDENING_AUDIT.md`. **Settings & Privacy** (see Core principles → 6. Privacy and profile visibility) is the designated next major product feature. Release-prep (a11y, env split, crash reporting, EAS, password rotation) remains a separate checklist before public launch.
 
 ---
 
