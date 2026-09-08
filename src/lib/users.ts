@@ -37,7 +37,9 @@ export async function getPublicProfile(
   });
 
   if (error) return { data: null, error: true };
-  const rows = (data ?? []) as Array<PublicProfileWithRelationship & { relationship_status: unknown }>;
+  const rows = (data ?? []) as Array<
+    Omit<PublicProfileWithRelationship, 'relationship_status'> & { relationship_status: unknown }
+  >;
   const row = rows[0];
   if (!row) return { data: null, error: false };
 
@@ -47,6 +49,9 @@ export async function getPublicProfile(
       display_name: row.display_name,
       avatar_url: row.avatar_url,
       relationship_status: parseRelationshipStatus(row.relationship_status),
+      friend_count: row.friend_count,
+      visible_memory_count: row.visible_memory_count,
+      mutual_friend_count: row.mutual_friend_count,
     },
     error: false,
   };

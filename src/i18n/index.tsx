@@ -1,5 +1,11 @@
 import { getLocales } from 'expo-localization';
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import {
+  getStoredLanguagePreference,
+  LanguagePreference,
+  setStoredLanguagePreference,
+} from '@/lib/app-preferences-storage';
 
 import { en, TranslationKey } from './locales/en';
 import { es } from './locales/es';
@@ -30,7 +36,8 @@ function oneVariant(key: PluralKey): TranslationKey {
 
 interface I18nContextValue {
   locale: Locale;
-  setLocale: (locale: Locale) => void;
+  languagePreference: LanguagePreference;
+  setLanguagePreference: (preference: LanguagePreference) => void;
   t: (key: TranslationKey, params?: Record<string, string>) => string;
   /**
    * Pluralized variant of `t`. English and Spanish both only distinguish
@@ -51,7 +58,26 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(detectLocale);
+  // Defaults to 'system' until the persisted value loads, so first paint
+  // already matches today's device-locale-only behaviour.
+  const [languagePreference, setLanguagePreferenceState] = useState<LanguagePreference>('system');
+
+  useEffect(() => {
+    let cancelled = false;
+    void getStoredLanguagePreference().then((stored) => {
+      if (!cancelled) setLanguagePreferenceState(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function setLanguagePreference(preference: LanguagePreference) {
+    setLanguagePreferenceState(preference);
+    void setStoredLanguagePreference(preference);
+  }
+
+  const locale: Locale = languagePreference === 'system' ? detectLocale() : languagePreference;
 
   const t = useCallback(
     (key: TranslationKey, params?: Record<string, string>): string => {
@@ -74,7 +100,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [t],
   );
 
-  const value = useMemo(() => ({ locale, setLocale, t, tn }), [locale, t, tn]);
+  const value = useMemo(
+    () => ({ locale, languagePreference, setLanguagePreference, t, tn }),
+    [locale, languagePreference, t, tn],
+  );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

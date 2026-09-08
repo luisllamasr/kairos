@@ -50,6 +50,35 @@ export async function countMyFriends(): Promise<{ count: number; error: boolean 
   return { count: (data as number) ?? 0, error: false };
 }
 
+/**
+ * A given profile's friend list (Privacy v1, docs/PROJECT.md §6). Gated
+ * server-side to the owner themselves or their confirmed friends — anyone
+ * else gets an empty list back, not an error, same as other Privacy v1 reads.
+ */
+export async function listProfileFriends(
+  username: string,
+): Promise<{ data: PublicProfile[]; error: boolean }> {
+  const { data, error } = await supabase.rpc('list_profile_friends', { p_username: username });
+
+  if (error) return { data: [], error: true };
+  return { data: (data ?? []) as PublicProfile[], error: false };
+}
+
+/**
+ * The mutual-friends identities behind a profile's mutual_friend_count
+ * (Privacy v1, docs/PROJECT.md §6). Gated server-side to viewers who are
+ * confirmed friends of the profile owner — anyone else gets an empty list
+ * back, not an error, same boundary shape as listProfileFriends.
+ */
+export async function listMutualFriends(
+  username: string,
+): Promise<{ data: PublicProfile[]; error: boolean }> {
+  const { data, error } = await supabase.rpc('list_mutual_friends', { p_username: username });
+
+  if (error) return { data: [], error: true };
+  return { data: (data ?? []) as PublicProfile[], error: false };
+}
+
 export async function listIncomingFriendRequests(): Promise<{
   data: IncomingFriendRequest[];
   error: boolean;

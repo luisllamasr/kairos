@@ -31,6 +31,7 @@ import {
   deleteMemoryPhoto,
   getMemory,
   getMemoryPhotoSignedUrl,
+  getMyMemoryProfileVisibility,
   leaveMemory,
   listMemoryMedia,
   listMemoryParticipants,
@@ -38,6 +39,7 @@ import {
   updateMyMemoryNote,
 } from '@/lib/memories';
 import { getAvatarPublicUrl } from '@/lib/profile';
+import { setMemoryProfileVisibility } from '@/lib/public-memories';
 import {
   Memory,
   MemoryMedia,
@@ -57,6 +59,9 @@ export default function MemoryDetailScreen() {
   const [media, setMedia] = useState<MemoryMedia[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [personalNote, setPersonalNote] = useState('');
+  // null = not yet loaded. Kept separate from actionError/actionLoading's
+  // memory gate below so a failure here never blocks the rest of the screen.
+  const [profileVisible, setProfileVisible] = useState<boolean | null>(null);
   const [error, setError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -105,7 +110,14 @@ export default function MemoryDetailScreen() {
     setMedia(mediaResult.data);
     setPersonalNote(memoryResult.data.my_personal_note ?? '');
     await loadPhotoUrls(mediaResult.data);
-  }, [id, loadPhotoUrls]);
+
+    // Independent of the above — a failure here shouldn't block the rest of
+    // the memory screen from loading, so it isn't part of the error gate.
+    if (myUserId) {
+      const visibilityResult = await getMyMemoryProfileVisibility(id, myUserId);
+      setProfileVisible(visibilityResult.error ? null : visibilityResult.data);
+    }
+  }, [id, loadPhotoUrls, myUserId]);
 
   const { initialLoading, refresh, resetLoaded } = useFocusRefresh(loadMemory);
 
@@ -154,6 +166,25 @@ export default function MemoryDetailScreen() {
     }
 
     setMemory((current) => (current ? { ...current, my_personal_note: note } : current));
+  }
+
+  async function handleToggleProfileVisibility() {
+    if (!memory || profileVisible === null || actionLoading) return;
+
+    const next = !profileVisible;
+    const previous = profileVisible;
+
+    setActionLoading(true);
+    setActionError(null);
+    setProfileVisible(next); // optimistic — reverted below on failure
+
+    const result = await setMemoryProfileVisibility(memory.id, next);
+    setActionLoading(false);
+
+    if (result.error) {
+      setProfileVisible(previous);
+      setActionError(t('memories.error.profileVisibility'));
+    }
   }
 
   async function handlePickPhoto() {
@@ -461,6 +492,30 @@ export default function MemoryDetailScreen() {
               style={styles.sectionButton}
             />
           </View>
+
+          {profileVisible !== null ? (
+            <View style={styles.section}>
+              <Text variant="title" style={styles.sectionTitle}>
+                {t('memories.detail.profileVisibility.title')}
+              </Text>
+              <Text variant="caption" style={styles.noteHint}>
+                {profileVisible
+                  ? t('memories.detail.profileVisibility.hintVisible')
+                  : t('memories.detail.profileVisibility.hintHidden')}
+              </Text>
+              <Button
+                label={
+                  profileVisible
+                    ? t('memories.detail.profileVisibility.hide')
+                    : t('memories.detail.profileVisibility.show')
+                }
+                variant="secondary"
+                onPress={() => void handleToggleProfileVisibility()}
+                loading={actionLoading}
+                style={styles.sectionButton}
+              />
+            </View>
+          ) : null}
 
           {actionError ? (
             <Text variant="error" style={styles.actionError}>

@@ -85,25 +85,90 @@ There is no separate “propose and validate before public” pipeline for user 
 
 ---
 
-## 6. Privacy and profile visibility (future — Settings & Privacy)
+## 6. Privacy v1 — identity, memory visibility, and public memory access (locked)
 
-Profile visibility in Kairos is **layered**, not binary. It is neither fully public nor fully private.
+Kairos does not treat privacy as "hide your identity." The app only functions if any authenticated user can find you, open your profile, and send you a friend request — so identity is never gated. The **only** real privacy control in Kairos is who can see your **memories**. This is a deliberate simplification over the earlier "layered profile visibility" idea explored during design — see rationale below.
 
-**Two audiences:**
+### Identity (always visible, no setting)
 
-- **Non-friends** see only a **basic public profile**: profile picture, display name, username, and any additional field the owner has explicitly chosen to make public.
-- **Friends** see additional information — but not automatically everything. Visibility of each additional field (and of memories on the profile) is controlled by the owner's own privacy preferences, not granted wholesale by the friendship itself.
+Every authenticated user can always find any other user via search, open their profile, and send a friend request — not a privacy decision, the minimum required for the app to function.
 
-**Owner controls, not defaults:** users decide what they share, at the field level, through a future **Settings & Privacy** section. Examples of preferences that section will expose:
+Always visible on a profile, to any authenticated viewer, with **no** configurability:
 
-- Whether memories appear on their profile at all.
-- Whether memories on their profile are visible to friends only, or more broadly.
-- Whether individual profile fields are public or friends-only.
-- Additional privacy preferences that may grow over time.
+- Avatar, display name, username.
+- Friend count.
+- A shared-memory count — see "Public-profile memory count is viewer-scoped (revised)" below. Not the owner's true total.
+- Mutual friend count — a **number only**; mutual friends' identities are never exposed through this stat.
 
-**Current state (temporary — not the intended design):** today, `profiles` RLS allows any authenticated user to read a profile's full row with no tiering (`USING (true)`). This is a known, deliberately-parked gap, not a product decision — it exists only because the Settings & Privacy section has not been built yet. Do not treat unrestricted visibility as acceptable long-term behavior, and do not design future features around it as if it were final.
+The full friends list is visible to **friends only** — locked, not user-configurable.
 
-**Anti-drift rule:** build the complete layered privacy model in **one coherent pass** when this section is implemented — do not ship an intermediate/partial visibility tier now and redesign it later. This is the designated next major feature after the current production-readiness hardening pass (see `docs/SECURITY.md` for the hardening work in progress).
+There is deliberately **no general "profile visibility" toggle**. Identity fields can never be hidden; the only privacy control governs memories.
+
+### Memory visibility (the actual privacy control)
+
+Each profile has one setting — `profiles.memories_visibility`: `only_me` | `friends` | `everyone`. Governs whether memories the user participated in appear **on their own profile**, for a given viewer (`friends` requires an accepted friendship; `everyone` means any authenticated user).
+
+Chosen at **onboarding** — *"Who can see your memories?"* — pre-selected to **`friends`** (the neutral/safe default); the user can continue without changing it. Existing accounts are backfilled to `friends`. Kairos deliberately does not build a large collection of granular per-field privacy toggles — this one setting is the whole model.
+
+### Per-memory profile visibility
+
+Independently of the global setting, each participant has their own `memory_participants.profile_visible` (default `true`) — an opt-out **per memory, per participant**: "don't show this specific memory on my profile." This only controls profile surfacing — it never removes the user as a participant and never changes the shared memory for anyone else.
+
+### Shared memories — the social model, not a technical one (locked)
+
+Kairos explicitly rejects per-photo or per-participant access controls on a shared memory. Visibility through a given participant's profile depends **only on that participant's own settings**, evaluated independently per participant:
+
+> If a shared memory is visible through participant A's profile (A's `memories_visibility` + `profile_visible` allow it), it is fully visible to that viewer — **even if** another participant B has set `only_me`. B's setting only guarantees the memory won't surface via **B's own profile**; it does not retroactively restrict the memory elsewhere.
+
+This mirrors how WhatsApp, Instagram, and Google Photos treat shared albums: once you've shared an experience with someone, they may share it further on their own terms. Disagreements between participants are expected to be resolved socially, and eventually through reporting/moderation (explicitly deferred — see below) — not through a permissions system. Do not revisit this into a per-participant consent/approval model without a strong product reason; it was a deliberate, discussed trade-off, not an oversight.
+
+### Public memory access — full detail, never a preview
+
+When a memory is visible via a profile, the viewer opens the **full** memory: title, description, location, date, and all photos. `friends` and `everyone` both mean full access (to friends, or to anyone, respectively) — never a restricted "preview" that then requires friendship to unlock. `only_me` means full access is limited to the relevant participant only.
+
+### Public participant privacy (locked)
+
+Even though memory *content* is fully visible per the above, **participant identities are never exposed in a public/non-participant read**:
+
+- Only a participant **count** is shown (e.g. "24 participants") — never names, avatars, or profile links. Public read RPCs must not return participant rows or any identity-bearing column (including `uploaded_by_user_id`) — enforced by the RPC response shape itself, not merely by UI discipline.
+- The public photo viewer never shows an uploader's name.
+- The public/read-only memory view shows no participant-management UI, leader badge/actions, add-photo, leave, transfer-leadership, delete, or personal-note controls — it is strictly read-only.
+- Only **active** participants (`left_at IS NULL AND user_id IS NOT NULL`) count toward both "is this memory visible via anyone's profile" and the public participant count — left/tombstoned participants are excluded from both, matching how active participation already works everywhere else in the memory lifecycle (`is_active_memory_participant`).
+
+### Public-profile memory count is viewer-scoped (revised)
+
+**This revises the original "memory count is always the true total" decision above** — kept only for the owner's own Profile tab, not for the public-profile surface.
+
+On another person's public profile, the memory stat represents **shared memories available to this specific viewer**, computed with the exact same server-side predicate as the memory list itself (`list_profile_memories` / `visible_memory_count` on `get_public_profile`). Its number always exactly equals the number of rendered memory rows — never the owner's raw total, and never independently computed client-side.
+
+Rationale: an unconditional total leaked the *existence* of memories the viewer couldn't see (e.g. a `friends`-only owner showing a non-zero count to a non-friend next to zero visible rows), and could silently disagree with the rendered list whenever a memory was individually hidden via `profile_visible`. Both are worse than simply scoping the number to what this viewer can actually see.
+
+When the visible count is zero, the memories section renders one neutral empty state ("There aren't any memories to show on this profile yet.") — it must never hint at *why* (no memories at all, `only_me`, `friends`, or every memory individually hidden all look identical). No blurred cards, lock rows, hidden counts, or other UI that leaks private-memory metadata.
+
+The owner's own Profile tab (`list_my_memories`) is unaffected by this — it still shows every memory the owner actively participates in, regardless of `memories_visibility` or `profile_visible`, exactly as before.
+
+### Owner's own view is never restricted
+
+`memories_visibility` and `profile_visible` only ever govern what **other people** see. A user's own Profile → Memories list and memory detail screens are completely unaffected — every memory they actively participate in still shows there in full, regardless of these settings. These settings are read through new, dedicated public-read RPCs (see RPC inventory once implemented) — they must never be wired into the existing owner-side `list_my_memories` / `get_memory` / `list_memory_participants` / `list_memory_media` path.
+
+### Explicitly out of scope for Privacy v1
+
+- Per-photo or per-field visibility controls, and any approval/permission flow between participants for sharing a shared memory.
+- Reporting or moderation tooling for privacy complaints or misuse — deferred to a later release-prep phase; the model above assumes good-faith use until then.
+- A public, logged-out-accessible profile — Privacy v1 covers authenticated viewers only (friend vs. non-friend). Logged-out public profiles are a Public Experiences–era question, not this chapter's.
+
+**Anti-drift rule:** this is the complete Privacy v1 model — implement it in **one coherent pass**, not as a partial version revisited later. This was the designated next major feature after the production-readiness hardening pass (see `docs/HARDENING_AUDIT.md`) and after Preferences v1 (Core principles → 7). **Public Experiences** is the next chapter after this one ships.
+
+## 7. App preferences (theme & language) — locked, implemented
+
+**Preferences v1** is the small, self-contained slice split out of the original "Settings v1" idea — the other half, profile privacy, is designed separately in **Core principles → 6** before any code is written. Preferences v1 needed no product design discussion because it has no visibility/permission implications, so it was implemented directly:
+
+- **Scope:** app theme (Light / Dark / System) and app language (English / Spanish / System). Nothing else lives in Preferences v1 — privacy fields, notification settings, etc. belong to later sections.
+- **Device-level, not account-level:** both preferences are stored in plain `AsyncStorage` (`kairos.preferences.theme.v1`, `kairos.preferences.language.v1`), not on the `profiles` row and not in the encrypted multi-account auth vault. Switching accounts on the same device must not flip the theme or language, since these describe how the device displays the app, not something owned by a specific account. Revisit only if a real product need for per-account language/theme ever appears (none is anticipated).
+- **"System" is the default and stays live:** picking "System" doesn't snapshot the current OS setting — it keeps tracking `useColorScheme()` / device locale continuously, matching pre-Preferences-v1 behavior for anyone who never opens the screen.
+- **Resolution order:** `ThemePreferenceProvider` (`src/context/theme-preference-context.tsx`) resolves `themePreference` against the device scheme into a single `colorScheme`, consumed by `useTheme()` and by the root navigation theme in `src/app/_layout.tsx` (previously the navigation theme read `useColorScheme()` directly — now it reads the same resolved value as every other screen, which is also a small consistency fix). `I18nProvider` (`src/i18n/index.tsx`) resolves `languagePreference` the same way into `locale`.
+- **Known, accepted tradeoff:** on cold start, the persisted preference loads asynchronously from `AsyncStorage`, so a device with a non-"System" override can render one frame in the system theme/locale before the stored override applies. Not gating app boot on this read (the way session bootstrap is gated) was a deliberate choice — the flash is a single frame in practice, and blocking every cold start on an `AsyncStorage` read for a cosmetic setting isn't worth the added complexity. Revisit only if this becomes visible/annoying in practice.
+- **UI:** `src/app/(app)/(profile)/preferences.tsx`, reached from Settings → Preferences.
 
 ---
 
@@ -173,9 +238,9 @@ Security model and Supabase Advisor rationale: **`docs/SECURITY.md`**.
 # Current status
 
 Phase:
-Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, **M14 shared experiences**, and **M15 Experience chat** complete. **Production-readiness architecture/security hardening audit: complete** — closing report in `docs/HARDENING_AUDIT.md` (see also `docs/SECURITY.md`). Feature development may resume; remaining launch-prep items (a11y, env split, Sentry, EAS, password rotation) are intentionally deferred — see that report.
+Identity and social foundation complete. **M12 Experiences**, **M13 Memories**, **M13.5 cleanup**, **M14 shared experiences**, and **M15 Experience chat** complete. **Production-readiness architecture/security hardening audit: complete** — closing report in `docs/HARDENING_AUDIT.md` (see also `docs/SECURITY.md`). **Preferences v1 (theme & language) complete** — see **Core principles → 7**.
 
-**Next major feature:** Settings & Privacy — the layered profile visibility model described in **Core principles → 6. Privacy and profile visibility**. Do not build an intermediate/partial version of this before then.
+**Next major feature:** Privacy v1 — the layered profile visibility model described in **Core principles → 6. Privacy and profile visibility**, designed in full before any implementation starts. After that, **Public Experiences** opens as the next big chapter. Do not build an intermediate/partial version of Privacy before then.
 
 Created by:
 Luis Llamas Ramón

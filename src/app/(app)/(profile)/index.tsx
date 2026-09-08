@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { MemoryListRow } from '@/components/MemoryListRow';
+import { ProfileStatsRow } from '@/components/ProfileStatsRow';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { TAB_SCREEN_EDGES } from '@/constants/layout';
@@ -90,20 +91,18 @@ export default function ProfileScreen() {
           @{profile?.username}
         </Text>
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text variant="title">{initialLoading ? '—' : memories.length}</Text>
-            <Text variant="caption">{t('profile.stats.memories')}</Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => push('/(app)/(profile)/friends')}
-            style={({ pressed }) => [styles.stat, styles.statPressable, pressed && styles.pressed]}
-          >
-            <Text variant="title">{initialLoading ? '—' : friendCount}</Text>
-            <Text variant="caption">{t('profile.stats.friends')}</Text>
-          </Pressable>
+        <View style={styles.statsRowWrapper}>
+          <ProfileStatsRow
+            stats={[
+              {
+                key: 'friends',
+                value: initialLoading ? '—' : friendCount,
+                label: t('profile.stats.friends'),
+                onPress: () => push('/(app)/(profile)/friends'),
+              },
+              { key: 'memories', value: initialLoading ? '—' : memories.length, label: t('profile.stats.memories') },
+            ]}
+          />
         </View>
 
         <Button
@@ -213,21 +212,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.lg,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.xxl,
+  statsRowWrapper: {
     marginBottom: Spacing.lg,
-  },
-  stat: {
-    alignItems: 'center',
-    gap: Spacing.xs,
-    minWidth: 72,
-  },
-  statPressable: {
-    borderRadius: 8,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
   },
   editButton: {
     alignSelf: 'stretch',

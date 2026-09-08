@@ -38,6 +38,9 @@ function profileFromSnapshot(
     username: snap.username,
     display_name: snap.display_name,
     avatar_url: snap.avatar_url,
+    // Placeholder only — this optimistic snapshot has no privacy setting of
+    // its own; it's replaced by the real fetched profile moments later.
+    memories_visibility: 'friends',
     created_at: '',
     updated_at: '',
   };

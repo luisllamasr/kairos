@@ -225,11 +225,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   rowDismissOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1,
   },
   rowDismissOverlayFront: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 3,
   },
   messageRow: {

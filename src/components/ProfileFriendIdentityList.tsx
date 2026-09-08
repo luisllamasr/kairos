@@ -1,77 +1,75 @@
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { InsetView } from '@/components/InsetView';
 
 import { Button } from '@/components/Button';
-import { IncomingFriendRequestRow } from '@/components/IncomingFriendRequestRow';
+import { InsetView } from '@/components/InsetView';
 import { ListLoadingSlot } from '@/components/ListLoadingSlot';
 import { Text } from '@/components/Text';
+import { UserSearchResult } from '@/components/UserSearchResult';
 import { DISABLE_SCROLL_INSET_ADJUSTMENT, TAB_SAFE_AREA_EDGES } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
+import { useCurrentProfileTabGroup } from '@/hooks/use-current-profile-tab-group';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
 import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
-import {
-  acceptFriendRequest,
-  declineFriendRequest,
-  listIncomingFriendRequests,
-} from '@/lib/friendships';
-import { IncomingFriendRequest } from '@/types/public-profile';
+import { PublicProfile } from '@/types/public-profile';
 
 const EDGES = TAB_SAFE_AREA_EDGES;
 
-export default function FriendRequestsScreen() {
+interface Props {
+  title: string;
+  emptyLabel: string;
+  errorLabel: string;
+  load: () => Promise<{ data: PublicProfile[]; error: boolean }>;
+}
+
+/**
+ * Shared list UI behind the profile-friends and mutual-friends dedicated
+ * screens (Privacy v1, docs/PROJECT.md §6). Both mirror the self "Friends"
+ * screen's UX (src/app/(app)/(profile)/friends.tsx), just sourced from a
+ * different RPC via `load`. Not a route itself — each caller
+ * (ProfileFriendsListScreen / ProfileMutualFriendsListScreen) is re-exported
+ * under both the Search and Profile tabs, same shared-route pattern as
+ * PublicProfileScreen, so Back returns to whichever tab the viewer came
+ * from.
+ */
+export function ProfileFriendIdentityList({ title, emptyLabel, errorLabel, load }: Props) {
   const { t } = useI18n();
   const colors = useTheme();
   const push = useGuardedPush();
+  const currentGroup = useCurrentProfileTabGroup();
 
-  const [requests, setRequests] = useState<IncomingFriendRequest[]>([]);
+  const [friends, setFriends] = useState<PublicProfile[]>([]);
   const [error, setError] = useState(false);
-  const [actionUsername, setActionUsername] = useState<string | null>(null);
 
-  const loadRequests = useCallback(async () => {
+  const loadFriends = useCallback(async () => {
     setError(false);
-
-    const { data, error: loadError } = await listIncomingFriendRequests();
-    setRequests(data);
+    const { data, error: loadError } = await load();
+    setFriends(data);
     setError(loadError);
-  }, []);
+  }, [load]);
 
-  const { initialLoading, refresh } = useFocusRefresh(loadRequests);
+  const { initialLoading, refresh } = useFocusRefresh(loadFriends);
 
-  async function handleAccept(username: string) {
-    setActionUsername(username);
-    const result = await acceptFriendRequest(username);
-    setActionUsername(null);
-    if (!result.error) await refresh();
-  }
-
-  async function handleDecline(username: string) {
-    setActionUsername(username);
-    const result = await declineFriendRequest(username);
-    setActionUsername(null);
-    if (!result.error) await refresh();
-  }
-
-  const showEmpty = !initialLoading && !error && requests.length === 0;
+  const showEmpty = !initialLoading && !error && friends.length === 0;
 
   return (
     <InsetView edges={EDGES} style={{ backgroundColor: colors.background }}>
       <FlatList
-        data={requests}
+        data={friends}
         keyExtractor={(item) => item.username}
         {...DISABLE_SCROLL_INSET_ADJUSTMENT}
         renderItem={({ item }) => (
-          <IncomingFriendRequestRow
-            request={item}
-            loading={actionUsername === item.username}
-            onAccept={() => handleAccept(item.username)}
-            onDecline={() => handleDecline(item.username)}
-            onPressProfile={() =>
+          <UserSearchResult
+            profile={item}
+            onPress={() =>
               push({
-                pathname: '/(app)/(profile)/user/[username]',
+                pathname:
+                  currentGroup === '(profile)'
+                    ? '/(app)/(profile)/user/[username]'
+                    : '/(app)/(search)/user/[username]',
                 params: { username: item.username },
               })
             }
@@ -82,24 +80,23 @@ export default function FriendRequestsScreen() {
         ListHeaderComponent={
           <>
             <Button
-              label={t('friendRequests.back')}
+              label={t('publicProfile.back')}
               variant="secondary"
               onPress={() => router.back()}
               style={styles.backButton}
             />
 
             <Text variant="title" style={styles.title}>
-              {t('friendRequests.title')}
-            </Text>
-            <Text variant="subtitle" style={styles.subtitle}>
-              {t('friendRequests.subtitle')}
+              {title}
             </Text>
 
-            <ListLoadingSlot active={initialLoading && requests.length === 0} />
+            <ListLoadingSlot active={initialLoading && friends.length === 0} />
 
             {!initialLoading && error && (
               <View style={styles.stateBlock}>
-                <Text variant="error">{t('friendRequests.error')}</Text>
+                <Text variant="error" style={styles.message}>
+                  {errorLabel}
+                </Text>
                 <Button label={t('error.retry')} onPress={() => void refresh({ showLoading: true })} />
               </View>
             )}
@@ -107,8 +104,8 @@ export default function FriendRequestsScreen() {
         }
         ListEmptyComponent={
           showEmpty ? (
-            <Text variant="subtitle" style={styles.empty}>
-              {t('friendRequests.empty')}
+            <Text variant="subtitle" style={styles.message}>
+              {emptyLabel}
             </Text>
           ) : null
         }
@@ -126,16 +123,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   title: {
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
     marginBottom: Spacing.md,
   },
   stateBlock: {
     gap: Spacing.md,
     alignItems: 'center',
   },
-  empty: {
+  message: {
     marginTop: Spacing.xl,
     textAlign: 'center',
   },

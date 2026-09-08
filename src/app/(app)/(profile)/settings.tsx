@@ -37,6 +37,14 @@ export default function SettingsScreen() {
 
       <View style={styles.links}>
         <SettingsLink
+          label={t('settings.preferences')}
+          onPress={() => push('/(app)/(profile)/preferences')}
+        />
+        <SettingsLink
+          label={t('settings.privacy')}
+          onPress={() => push('/(app)/(profile)/privacy')}
+        />
+        <SettingsLink
           label={t('profile.switchAccount')}
           onPress={() => push('/(app)/(profile)/switch-account')}
         />

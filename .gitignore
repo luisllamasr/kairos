@@ -33,6 +33,7 @@ android/
 .temp
 supabase/.branches
 supabase/.temp
+.tools/
 
 # --- Logs and debug ---
 npm-debug.*

@@ -1,4 +1,5 @@
-import { DarkTheme, DefaultTheme, Theme } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, Theme } from 'expo-router';
+import { ColorValue } from 'react-native';
 
 import { DarkColors, LightColors } from '@/constants/theme';
 
@@ -24,7 +25,7 @@ export function getNavigationTheme(scheme: 'light' | 'dark' | null | undefined):
 }
 
 /** Root stack — no transition when swapping auth groups on cold launch. */
-export function getRootStackScreenOptions(backgroundColor: string) {
+export function getRootStackScreenOptions(backgroundColor: ColorValue) {
   return {
     headerShown: false,
     contentStyle: { backgroundColor },

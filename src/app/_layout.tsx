@@ -1,9 +1,8 @@
-import { Stack } from 'expo-router';
-import { ThemeProvider } from '@react-navigation/native';
-import { useColorScheme } from 'react-native';
+import { Stack, ThemeProvider } from 'expo-router';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/context/auth-context';
+import { ThemePreferenceProvider, useThemePreference } from '@/context/theme-preference-context';
 import { I18nProvider } from '@/i18n';
 import {
   getNavigationTheme,
@@ -11,8 +10,8 @@ import {
 } from '@/navigation/navigation-theme';
 
 function RootNavigator() {
-  const scheme = useColorScheme();
-  const navigationTheme = getNavigationTheme(scheme);
+  const { colorScheme } = useThemePreference();
+  const navigationTheme = getNavigationTheme(colorScheme);
 
   return (
     <ThemeProvider value={navigationTheme}>
@@ -24,11 +23,13 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <AuthProvider>
-        <I18nProvider>
-          <RootNavigator />
-        </I18nProvider>
-      </AuthProvider>
+      <ThemePreferenceProvider>
+        <AuthProvider>
+          <I18nProvider>
+            <RootNavigator />
+          </I18nProvider>
+        </AuthProvider>
+      </ThemePreferenceProvider>
     </SafeAreaProvider>
   );
 }

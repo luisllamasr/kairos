@@ -49,7 +49,7 @@ export default function FriendsScreen() {
             profile={item}
             onPress={() =>
               push({
-                pathname: '/(app)/(search)/user/[username]',
+                pathname: '/(app)/(profile)/user/[username]',
                 params: { username: item.username },
               })
             }

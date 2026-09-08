@@ -1,0 +1,25 @@
+-- Close a defense-in-depth gap flagged by the Supabase security advisor:
+-- public.experience_invite_declines was created (20260626100000) without RLS,
+-- unlike its three sibling tables in the same migration, which all got an
+-- explicit GRANT SELECT + ENABLE ROW LEVEL SECURITY + policy. This one was
+-- simply left out of that section -- an oversight, not a design decision.
+--
+-- Verified against the live database before writing this migration:
+--   - anon/authenticated have NO SELECT/INSERT/UPDATE/DELETE grant on this
+--     table (only the schema-wide default REFERENCES/TRIGGER/TRUNCATE).
+--   - anon/authenticated have NO EXECUTE grant on the only two functions
+--     that touch it directly (is_experience_invite_blocked,
+--     record_experience_invite_decline); both REVOKE ALL FROM PUBLIC and
+--     were never re-granted to authenticated.
+--   - Every legitimate read/write goes through those two SECURITY DEFINER
+--     functions (owned by postgres), called internally by other SECURITY
+--     DEFINER RPCs. SECURITY DEFINER functions always bypass RLS, so this
+--     change cannot affect the invite/decline lifecycle.
+--
+-- Net effect today: zero behavior change, zero new grants, zero policies.
+-- This simply makes "no direct client access" structurally enforced instead
+-- of incidentally true because a GRANT happens to be missing -- so a future
+-- GRANT alone (e.g. copy-pasted from a sibling table) can no longer expose
+-- this table's data without someone also deliberately adding a policy.
+
+ALTER TABLE public.experience_invite_declines ENABLE ROW LEVEL SECURITY;

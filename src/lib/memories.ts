@@ -132,6 +132,25 @@ export async function ensureExperienceTransformed(
   return { data: (data as string | null) ?? null, error: false };
 }
 
+// Reads the caller's own profile_visible flag for a memory they participate
+// in. Direct table read (not an RPC) — memory_participants already grants
+// SELECT to authenticated with a fellow-participant RLS policy, same pattern
+// as the direct profiles.update() calls used elsewhere in the app.
+export async function getMyMemoryProfileVisibility(
+  memoryId: string,
+  userId: string,
+): Promise<{ data: boolean | null; error: boolean }> {
+  const { data, error } = await supabase
+    .from('memory_participants')
+    .select('profile_visible')
+    .eq('memory_id', memoryId)
+    .eq('user_id', userId)
+    .is('left_at', null)
+    .maybeSingle();
+  if (error) return { data: null, error: true };
+  return { data: (data?.profile_visible as boolean | undefined) ?? null, error: false };
+}
+
 export async function updateMyMemoryNote(
   memoryId: string,
   note: string | null,

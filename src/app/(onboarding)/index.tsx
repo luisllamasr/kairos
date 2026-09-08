@@ -1,17 +1,20 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { uploadAvatar, validateUsername } from '@/lib/profile';
 import { supabase } from '@/lib/supabase';
+import { MemoriesVisibility } from '@/types/profile';
 
 export default function OnboardingScreen() {
   const { session, refreshProfile } = useAuth();
@@ -22,8 +25,18 @@ export default function OnboardingScreen() {
   const [localAvatarBase64, setLocalAvatarBase64] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
+  // Privacy v1 (docs/PROJECT.md §6): pre-selected 'friends' so the user can
+  // continue immediately without making a choice, while still landing on the
+  // intentional, neutral default rather than an implicit one.
+  const [memoriesVisibility, setMemoriesVisibility] = useState<MemoriesVisibility>('friends');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const memoriesVisibilityOptions: { value: MemoriesVisibility; label: string }[] = [
+    { value: 'only_me', label: t('onboarding.memoriesVisibility.onlyMe') },
+    { value: 'friends', label: t('onboarding.memoriesVisibility.friends') },
+    { value: 'everyone', label: t('onboarding.memoriesVisibility.everyone') },
+  ];
 
   async function handlePickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -83,6 +96,7 @@ export default function OnboardingScreen() {
       .update({
         username: username.trim(),
         display_name: displayName.trim(),
+        memories_visibility: memoriesVisibility,
         ...(avatarPath ? { avatar_url: avatarPath } : {}),
       })
       .eq('id', session!.user.id);
@@ -157,6 +171,23 @@ export default function OnboardingScreen() {
         <Text variant="caption">{t('profile.displayName.rules.length')}</Text>
       </View>
 
+      <Text variant="body" style={styles.sectionTitle}>
+        {t('onboarding.memoriesVisibility.title')}
+      </Text>
+      <Text variant="caption" style={styles.sectionSubtitle}>
+        {t('onboarding.memoriesVisibility.subtitle')}
+      </Text>
+      <View style={styles.group}>
+        {memoriesVisibilityOptions.map((option) => (
+          <OptionRow
+            key={option.value}
+            label={option.label}
+            selected={memoriesVisibility === option.value}
+            onPress={() => setMemoriesVisibility(option.value)}
+          />
+        ))}
+      </View>
+
       {error ? (
         <Text variant="error" style={styles.error}>
           {error}
@@ -170,6 +201,38 @@ export default function OnboardingScreen() {
         style={styles.button}
       />
     </Screen>
+  );
+}
+
+function OptionRow({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const colors = useTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        { borderColor: colors.border },
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text variant="body">{label}</Text>
+      {selected ? (
+        <Ionicons name="checkmark-circle" size={22} color={colors.brand} />
+      ) : (
+        <Ionicons name="ellipse-outline" size={22} color={colors.border} />
+      )}
+    </Pressable>
   );
 }
 
@@ -194,6 +257,28 @@ const styles = StyleSheet.create({
   rules: {
     marginBottom: Spacing.lg,
     gap: Spacing.xs,
+  },
+  sectionTitle: {
+    marginBottom: Spacing.xs,
+  },
+  sectionSubtitle: {
+    marginBottom: Spacing.sm,
+  },
+  group: {
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   error: {
     marginBottom: Spacing.sm,
