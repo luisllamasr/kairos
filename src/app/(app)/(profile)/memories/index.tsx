@@ -106,7 +106,7 @@ export default function MemoriesScreen() {
                 {t('memories.empty')}
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
       />
     </InsetView>

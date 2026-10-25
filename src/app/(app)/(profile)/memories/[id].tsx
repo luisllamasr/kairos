@@ -23,6 +23,7 @@ import { Spacing } from '@/constants/theme';
 import { TEXT_LIMITS, isWithinTextLimit } from '@/constants/text-limits';
 import { useAuth } from '@/context/auth-context';
 import { useFocusRefresh } from '@/hooks/use-focus-refresh';
+import { useGuardedPush } from '@/hooks/use-guarded-push';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { formatExperienceRange } from '@/lib/experience-dates';
@@ -53,6 +54,7 @@ export default function MemoryDetailScreen() {
   const { session } = useAuth();
   const { t, locale } = useI18n();
   const colors = useTheme();
+  const push = useGuardedPush();
 
   const [memory, setMemory] = useState<Memory | null>(null);
   const [participants, setParticipants] = useState<MemoryParticipant[]>([]);
@@ -318,6 +320,14 @@ export default function MemoryDetailScreen() {
     ]);
   }
 
+  function handleParticipantPress(participant: MemoryParticipant) {
+    if (participant.user_id === null || participant.username === null) return;
+    push({
+      pathname: '/(app)/(profile)/user/[username]',
+      params: { username: participant.username },
+    });
+  }
+
   function handleTransferParticipantPress(participant: MemoryParticipant) {
     if (!memory || actionLoading || participant.user_id === null) return;
 
@@ -393,31 +403,54 @@ export default function MemoryDetailScreen() {
               <Text variant="title" style={styles.sectionTitle}>
                 {t('memories.detail.participants')}
               </Text>
-              {activeParticipants.map((participant) => (
-                <View key={participant.participant_id} style={styles.participantRow}>
-                  <Avatar
-                    uri={getAvatarPublicUrl(participant.avatar_url)}
-                    displayName={participantLabel(participant)}
-                    size={40}
-                  />
-                  <View style={styles.participantText}>
-                    <Text variant="body">{participantLabel(participant)}</Text>
-                    {participant.is_leader ? (
-                      <Text variant="caption">{t('memories.detail.leader')}</Text>
+              {activeParticipants.map((participant) => {
+                const canOpenProfile =
+                  participant.user_id !== null && participant.username !== null;
+                const identity = (
+                  <>
+                    <Avatar
+                      uri={getAvatarPublicUrl(participant.avatar_url)}
+                      displayName={participantLabel(participant)}
+                      size={40}
+                    />
+                    <View style={styles.participantText}>
+                      <Text variant="body">{participantLabel(participant)}</Text>
+                      {participant.is_leader ? (
+                        <Text variant="caption">{t('memories.detail.leader')}</Text>
+                      ) : null}
+                    </View>
+                  </>
+                );
+
+                return (
+                  <View key={participant.participant_id} style={styles.participantRow}>
+                    {canOpenProfile ? (
+                      <Pressable
+                        onPress={() => handleParticipantPress(participant)}
+                        style={({ pressed }) => [
+                          styles.participantPress,
+                          pressed && styles.pressed,
+                        ]}
+                        accessibilityRole="button"
+                      >
+                        {identity}
+                      </Pressable>
+                    ) : (
+                      <View style={styles.participantPress}>{identity}</View>
+                    )}
+                    {contentMemory.am_leader &&
+                    participant.user_id !== null &&
+                    !participant.is_leader &&
+                    participant.user_id !== myUserId ? (
+                      <MemoryParticipantActionsMenu
+                        participantName={participantLabel(participant)}
+                        disabled={actionLoading}
+                        onTransfer={() => handleTransferParticipantPress(participant)}
+                      />
                     ) : null}
                   </View>
-                  {contentMemory.am_leader &&
-                  participant.user_id !== null &&
-                  !participant.is_leader &&
-                  participant.user_id !== myUserId ? (
-                    <MemoryParticipantActionsMenu
-                      participantName={participantLabel(participant)}
-                      disabled={actionLoading}
-                      onTransfer={() => handleTransferParticipantPress(participant)}
-                    />
-                  ) : null}
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : null}
 
@@ -595,6 +628,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     marginBottom: Spacing.xs,
+  },
+  participantPress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   participantText: {
     flex: 1,

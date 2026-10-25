@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
@@ -84,26 +84,16 @@ export function ExperienceDateTimeField({
     closePicker();
   }
 
-  function handleIosChange(_event: DateTimePickerEvent, selected?: Date) {
-    if (selected) setDraft(selected);
+  function handleIosValueChange(_event: DateTimePickerChangeEvent, selected: Date) {
+    setDraft(selected);
   }
 
-  function handleAndroidDateChange(event: DateTimePickerEvent, selected?: Date) {
-    if (event.type === 'dismissed') {
-      closePicker();
-      return;
-    }
-    if (!selected) return;
+  function handleAndroidDateValueChange(_event: DateTimePickerChangeEvent, selected: Date) {
     setDraft((current) => mergeDate(current, selected));
     setAndroidStep('time');
   }
 
-  function handleAndroidTimeChange(event: DateTimePickerEvent, selected?: Date) {
-    if (event.type === 'dismissed') {
-      closePicker();
-      return;
-    }
-    if (!selected) return;
+  function handleAndroidTimeValueChange(_event: DateTimePickerChangeEvent, selected: Date) {
     onChange(mergeTime(draft, selected));
     closePicker();
   }
@@ -158,7 +148,7 @@ export function ExperienceDateTimeField({
                 mode="datetime"
                 display="spinner"
                 minimumDate={minimumDate}
-                onChange={handleIosChange}
+                onValueChange={handleIosValueChange}
                 themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
               />
             </View>
@@ -172,7 +162,8 @@ export function ExperienceDateTimeField({
           mode="date"
           display="default"
           minimumDate={minimumDate}
-          onChange={handleAndroidDateChange}
+          onValueChange={handleAndroidDateValueChange}
+          onDismiss={closePicker}
         />
       )}
 
@@ -182,7 +173,8 @@ export function ExperienceDateTimeField({
           mode="time"
           display="default"
           minimumDate={androidTimeMinimum}
-          onChange={handleAndroidTimeChange}
+          onValueChange={handleAndroidTimeValueChange}
+          onDismiss={closePicker}
         />
       )}
     </View>

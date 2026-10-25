@@ -255,6 +255,18 @@ export function PublicProfileScreen() {
     });
   }
 
+  // No username needed here (get_public_memory only takes the memory id),
+  // unlike the friends/mutual-friends pushes above — still duplicated per
+  // tab via currentGroup so Back returns to whichever tab this profile was
+  // opened from, same as those.
+  function pushToMemory(memoryId: string) {
+    push({
+      pathname:
+        currentGroup === '(profile)' ? '/(app)/(profile)/memory/[id]' : '/(app)/(search)/memory/[id]',
+      params: { id: memoryId },
+    });
+  }
+
   function renderStats() {
     if (!contentProfile) return null;
 
@@ -330,9 +342,12 @@ export function PublicProfileScreen() {
           </Text>
         ) : (
           memories.map((memory) => (
-            // Informational only — no chevron, press state, or navigation.
-            // Public memory detail is a separate, later slice.
-            <View key={memory.id} style={styles.memoryRow}>
+            <Pressable
+              key={memory.id}
+              onPress={() => pushToMemory(memory.id)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.memoryRow, pressed && styles.pressed]}
+            >
               <Text variant="body" numberOfLines={2}>
                 {memory.title}
               </Text>
@@ -344,7 +359,7 @@ export function PublicProfileScreen() {
                   {memory.location_name}
                 </Text>
               ) : null}
-            </View>
+            </Pressable>
           ))
         )}
       </View>

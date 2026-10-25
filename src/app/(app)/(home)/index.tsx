@@ -119,7 +119,7 @@ export default function HomeScreen() {
                 {t('home.emptyHint')}
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
       />
     </InsetView>

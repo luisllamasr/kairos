@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type ViewInstance } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
@@ -26,7 +26,7 @@ interface Props {
   onPress: () => void;
   onMoreActionsPress: () => void;
   onReactionPress: (emoji: string) => void;
-  setPickerRef: (node: View | null) => void;
+  setPickerRef: (node: ViewInstance | null) => void;
 }
 
 export function MessageBubble({

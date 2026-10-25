@@ -107,7 +107,7 @@ export function ProfileFriendIdentityList({ title, emptyLabel, errorLabel, load 
             <Text variant="subtitle" style={styles.message}>
               {emptyLabel}
             </Text>
-          ) : null
+          ) : undefined
         }
       />
     </InsetView>

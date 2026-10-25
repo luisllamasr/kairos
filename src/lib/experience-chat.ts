@@ -92,15 +92,35 @@ export async function setExperienceMessageReaction(
 export type ExperienceChatRealtimeHandlers = {
   onMessagesChange: () => void;
   onReactionChange: (messageId: string) => void;
+  /**
+   * Fired every time the channel reaches SUBSCRIBED -- the first join AND every
+   * automatic rejoin after a dropped socket. postgres_changes delivers nothing
+   * that happened before the join (or while disconnected), and `SUBSCRIBED` can
+   * even precede the server-side change subscription being fully ready, so the
+   * caller should refetch recent state here to close that gap.
+   */
+  onSubscribed: () => void;
 };
 
+/**
+ * Private channel: joining requires the `experience_chat_channel_read` policy on
+ * `realtime.messages` (participant + `chat_read`). Table RLS on the underlying
+ * rows still applies on top of that for the messages binding.
+ *
+ * Reactions deliberately have NO `postgres_changes` binding: Realtime does not
+ * apply RLS to DELETE events, so that binding leaked every reaction removal to
+ * any subscriber. A database trigger (migration 20260803150000) sends a private
+ * Broadcast `reaction_changed` carrying only `message_id` to this topic instead;
+ * the handler below refetches that message's reactions through the RLS-protected
+ * RPC, so nothing but the id travels in the event.
+ */
 export function subscribeExperienceChat(
   experienceId: string,
   hasMessageId: (messageId: string) => boolean,
   handlers: ExperienceChatRealtimeHandlers,
 ): RealtimeChannel {
   return supabase
-    .channel(`experience-chat:${experienceId}`)
+    .channel(`experience-chat:${experienceId}`, { config: { private: true } })
     .on(
       'postgres_changes',
       {
@@ -113,21 +133,14 @@ export function subscribeExperienceChat(
         handlers.onMessagesChange();
       },
     )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'experience_message_reactions',
-      },
-      (payload) => {
-        const row = (payload.new ?? payload.old) as { message_id?: string } | null;
-        const messageId = row?.message_id;
-        if (!messageId || !hasMessageId(messageId)) return;
-        handlers.onReactionChange(messageId);
-      },
-    )
-    .subscribe();
+    .on('broadcast', { event: 'reaction_changed' }, ({ payload }) => {
+      const messageId = (payload as { message_id?: unknown } | null)?.message_id;
+      if (typeof messageId !== 'string' || !hasMessageId(messageId)) return;
+      handlers.onReactionChange(messageId);
+    })
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') handlers.onSubscribed();
+    });
 }
 
 export function unsubscribeExperienceChat(channel: RealtimeChannel | null): void {

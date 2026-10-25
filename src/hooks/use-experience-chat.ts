@@ -216,6 +216,10 @@ export function useExperienceChat(experienceId: string | null, myUserId: string 
       (messageId) => messageIdsRef.current.has(messageId),
       {
         onMessagesChange: scheduleReloadRecentMessages,
+        // Closes the gap between loadInitial() and the realtime join, and any gap
+        // while the socket was down. Merges by id (reactions included), so it is
+        // idempotent and safe to run on every (re)subscribe.
+        onSubscribed: scheduleReloadRecentMessages,
         onReactionChange: (messageId) => {
           const generation = bumpReactionGeneration(messageId);
           void refreshMessageReactions(messageId).then(({ reactions, error: reactError }) => {

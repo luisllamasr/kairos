@@ -90,7 +90,7 @@ export default function FriendsScreen() {
             <Text variant="subtitle" style={styles.message}>
               {t('friends.empty')}
             </Text>
-          ) : null
+          ) : undefined
         }
       />
     </InsetView>

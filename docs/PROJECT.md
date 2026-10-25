@@ -957,7 +957,7 @@ Do **not** add during Experiences/Memories milestones:
 
 Current goal:
 
-**Feature development resumed after hardening.** Closing report: `docs/HARDENING_AUDIT.md`. **Settings & Privacy** (see Core principles → 6. Privacy and profile visibility) is the designated next major product feature. Release-prep (a11y, env split, crash reporting, EAS, password rotation) remains a separate checklist before public launch.
+**Feature development resumed after hardening.** Closing report: `docs/HARDENING_AUDIT.md`. **Settings & Privacy** (see Core principles → 6. Privacy and profile visibility) is the designated next major product feature. Release-prep (a11y, env split, crash reporting, EAS, production database password rotation) remains a separate checklist before public launch. (The development project's database password was already rotated in Oct 2026; the production rotation is a separate, still-open task.)
 
 ---
 
@@ -1088,7 +1088,9 @@ experience_message_reactions
   UNIQUE (message_id, user_id)          — one reaction per user per message; toggle replaces emoji
 ```
 
-**Realtime publication:** Add `experience_messages` and `experience_message_reactions` to Supabase Realtime (participant-scoped RLS on SELECT).
+**Realtime publication:** `experience_messages` is in the Supabase Realtime publication (participant-scoped RLS on SELECT). `experience_message_reactions` was added in M15.1 but **removed again by `20260803150000`** (its `DELETE` events bypass RLS); reaction changes now travel as a trigger-sent private Broadcast (below).
+
+**Realtime channels (post-M15):** both chat channels are *private* and authorized by RLS on `realtime.messages` (migration `20260803140000`, reusing `experience_user_can`): `experience-chat:{id}` (`postgres_changes` for messages, plus Broadcast `reaction_changed {message_id}` sent by a database trigger on `experience_message_reactions`, migration `20260803150000`; the client refetches that message's reactions through the RLS-protected RPC) and `experience-chat-signals:{id}` (ephemeral Broadcast: typing indicator; receive = `chat_read`, send = `chat_write`). The chat refetches recent messages on every channel `SUBSCRIBED` to close the join/reconnect gap. On the dev project the dashboard setting "Allow public access to channels" is now OFF, the reaction `DELETE` leak (reproduced, then fixed) is closed there, and the live `reactions` and `phase2` checks passed; **the fix has not been applied to production.** Model, limitations, test results and the unchanged, pre-existing message-`DELETE` observation (only the message `id`): `docs/SECURITY.md` → Realtime authorization. *Dev note:* a React Native `VirtualizedList: You have a large list that is slow to update` console log appeared intermittently when the keyboard opened in a long chat; it is a scroll-event heuristic (not a render measurement), did not reproduce consistently and was not confirmed as a user-visible problem, so the chat list was left unchanged.
 
 **Account delete:** `author_id` SET NULL on messages; message rows remain until experience DELETE. UI shows **“Deleted user”** (same pattern as memory photos).
 

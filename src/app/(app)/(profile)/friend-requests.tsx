@@ -110,7 +110,7 @@ export default function FriendRequestsScreen() {
             <Text variant="subtitle" style={styles.empty}>
               {t('friendRequests.empty')}
             </Text>
-          ) : null
+          ) : undefined
         }
       />
     </InsetView>

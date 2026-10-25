@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  type TextInputInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,6 +28,8 @@ interface Props {
    * can't rely on `onFocus` alone.
    */
   onFocus: () => void;
+  /** Fired when the input loses focus. */
+  onBlur?: () => void;
   onSend: () => void;
   sending: boolean;
   canSendBody: boolean;
@@ -39,6 +42,7 @@ export function ChatComposer({
   value,
   onChangeText,
   onFocus,
+  onBlur,
   onSend,
   sending,
   canSendBody,
@@ -47,6 +51,44 @@ export function ChatComposer({
 }: Props) {
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  const inputRef = useRef<TextInputInstance>(null);
+  const wasFocusedRef = useRef(false);
+  const previousValueRef = useRef(value);
+
+  // Native multiline auto-grow (see composerInput's maxHeight below) handles
+  // all normal growth on its own and was never actually broken. The only
+  // real bug was the native view's own internal height failing to shrink
+  // back down after `value` is cleared *programmatically* (setComposerText
+  // ('') on send, not the user backspacing) — a known iOS quirk where a
+  // controlled multiline TextInput doesn't reliably re-run its shrink
+  // remeasure for that kind of external clear.
+  //
+  // Forcing a fresh native TextInput instance exactly at that transition
+  // sidesteps the quirk entirely without reimplementing growth in JS: a
+  // remounted view always starts at its natural one-line intrinsic height,
+  // with the same untouched native auto-grow behavior as before.
+  const [resetKey, setResetKey] = useState(0);
+
+  useEffect(() => {
+    const wasEmpty = previousValueRef.current.length === 0;
+    const isEmpty = value.length === 0;
+    if (!wasEmpty && isEmpty) {
+      setResetKey((key) => key + 1);
+    }
+    previousValueRef.current = value;
+  }, [value]);
+
+  // Remounting drops native focus. If the composer was focused right before
+  // the reset (the common case — sending doesn't blur it), restore focus on
+  // the new instance so sending doesn't interrupt typing the next message.
+  // Skipped on the initial mount (resetKey still 0).
+  useEffect(() => {
+    if (resetKey === 0) return;
+    if (wasFocusedRef.current) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [resetKey]);
 
   useEffect(() => {
     // iOS: will* tracks the keyboard animation so padding grows with the lift.
@@ -70,6 +112,16 @@ export function ChatComposer({
     ? Math.max(insets.bottom, Spacing.sm)
     : Spacing.sm;
 
+  function handleFocus() {
+    wasFocusedRef.current = true;
+    onFocus();
+  }
+
+  function handleBlur() {
+    wasFocusedRef.current = false;
+    onBlur?.();
+  }
+
   return (
     <View
       style={[styles.composerRow, { borderTopColor: colors.border, paddingBottom }]}
@@ -77,8 +129,11 @@ export function ChatComposer({
     >
       <View style={[styles.composerShell, { borderColor: colors.border }]}>
         <TextInput
+          key={resetKey}
+          ref={inputRef}
           value={value}
-          onFocus={onFocus}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           onTouchStart={onFocus}
           onChangeText={onChangeText}
           placeholder={placeholder}

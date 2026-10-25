@@ -29,13 +29,19 @@ const CLOSE_HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
 
 type Props = {
   visible: boolean;
-  memory: Pick<Memory, 'am_leader'>;
+  // memory/participants/myUserId are omitted entirely for a public-memory
+  // viewer (no participant identities or uploader/delete affordances to
+  // show there) — this is that "public mode": the metadata footer below
+  // (uploader name, upload date, delete button) only renders when both
+  // memory and participants are supplied, which the public caller simply
+  // never does. Not a separate component — see PublicMemoryDetailScreen.
+  memory?: Pick<Memory, 'am_leader'>;
   media: MemoryMedia[];
   photoUrls: Record<string, string>;
-  participants: MemoryParticipant[];
+  participants?: MemoryParticipant[];
   initialIndex: number;
   localeTag: string;
-  myUserId: string | null;
+  myUserId?: string | null;
   deleteLoading?: boolean;
   onClose: () => void;
   onDeletePhoto?: (media: MemoryMedia) => void;
@@ -98,10 +104,15 @@ export function MemoryPhotoViewer({
 
   const safeIndex = Math.min(Math.max(0, currentIndex), media.length - 1);
   const activeItem = media[safeIndex];
+  // showMetadata (not just canDelete) gates the whole footer — public mode
+  // omits memory/participants and must show no uploader/date/delete info
+  // at all, not just skip the delete button.
+  const showMetadata = Boolean(memory && participants);
   const canDelete =
     activeItem &&
+    memory &&
     onDeletePhoto &&
-    canDeleteMemoryPhoto(activeItem, memory, myUserId) &&
+    canDeleteMemoryPhoto(activeItem, memory, myUserId ?? null) &&
     !deleteLoading;
 
   return (
@@ -180,7 +191,7 @@ export function MemoryPhotoViewer({
           }}
         />
 
-        {activeItem ? (
+        {activeItem && showMetadata ? (
           <View
             style={[
               styles.metadata,
@@ -192,7 +203,7 @@ export function MemoryPhotoViewer({
             ]}
           >
             <Text variant="body" style={styles.metadataPrimary}>
-              {memoryMediaUploaderDisplayName(activeItem, participants, participantLabels)}
+              {memoryMediaUploaderDisplayName(activeItem, participants!, participantLabels)}
             </Text>
             <Text variant="caption" style={styles.metadataSecondary}>
               {formatUploadDate(activeItem.created_at, localeTag)}

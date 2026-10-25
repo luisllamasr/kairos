@@ -9,18 +9,21 @@ import {
   Pressable,
   StyleSheet,
   View,
+  type ViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { DetailLoadingSlot } from '@/components/DetailLoadingSlot';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useExperienceChat } from '@/hooks/use-experience-chat';
+import { useExperienceTyping } from '@/hooks/use-experience-typing';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 
@@ -30,7 +33,7 @@ const MESSAGE_ROW_GAP = Spacing.xs;
 
 export default function ExperienceChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const { t, locale } = useI18n();
   const colors = useTheme();
   const insets = useSafeAreaInsets();
@@ -39,8 +42,19 @@ export default function ExperienceChatScreen() {
 
   const chat = useExperienceChat(experienceId, myUserId);
 
-  const listViewportRef = useRef<View>(null);
-  const pickerRefs = useRef<Record<string, View | null>>({});
+  // Ephemeral typing signals on their own private channel. Joined only once the
+  // chat itself loaded successfully; any failure here is silent and never touches
+  // messages or reactions.
+  const typing = useExperienceTyping({
+    experienceId,
+    enabled: Boolean(chat.experience) && !chat.loading && !chat.error,
+    canSend: chat.canSend,
+    myUserId,
+    myName: profile?.display_name ?? profile?.username ?? '',
+  });
+
+  const listViewportRef = useRef<ViewInstance>(null);
+  const pickerRefs = useRef<Record<string, ViewInstance | null>>({});
   const scrollOffsetRef = useRef(0);
   const anchorRevealScheduledRef = useRef(false);
 
@@ -70,7 +84,7 @@ export default function ExperienceChatScreen() {
   }
 
   const setPickerRef = useCallback((messageId: string) => {
-    return (node: View | null) => {
+    return (node: ViewInstance | null) => {
       pickerRefs.current[messageId] = node;
     };
   }, []);
@@ -166,10 +180,6 @@ export default function ExperienceChatScreen() {
     }
   }
 
-  function handleScrollBeginDrag() {
-    Keyboard.dismiss();
-  }
-
   function handleContentSizeChange() {
     // The initial "scroll to bottom on load" effect (in useExperienceChat)
     // fires a single requestAnimationFrame right after messages arrive, which
@@ -248,7 +258,7 @@ export default function ExperienceChatScreen() {
             {t('experiences.chat.empty')}
           </Text>
         </View>
-      ) : null,
+      ) : undefined,
     [chat.error, chat.loading, t],
   );
 
@@ -358,7 +368,7 @@ export default function ExperienceChatScreen() {
                     <Text variant="caption" style={styles.loadingOlder}>
                       {t('experiences.chat.loadingOlder')}
                     </Text>
-                  ) : null
+                  ) : undefined
                 }
                 ItemSeparatorComponent={renderMessageRowSeparator}
                 ListFooterComponent={dismissPickerFooter}
@@ -372,9 +382,10 @@ export default function ExperienceChatScreen() {
                 scrollEventThrottle={16}
                 keyboardDismissMode="interactive"
                 keyboardShouldPersistTaps="handled"
-                onScrollBeginDrag={handleScrollBeginDrag}
               />
             </View>
+
+            <TypingIndicator names={typing.typers.map((typer) => typer.name)} />
 
             {chat.actionError ? (
               <Text variant="error" style={styles.actionError}>
@@ -386,11 +397,20 @@ export default function ExperienceChatScreen() {
               <ChatComposer
                 colors={colors}
                 value={chat.composerText}
-                onChangeText={chat.setComposerText}
+                onChangeText={(text) => {
+                  chat.setComposerText(text);
+                  typing.handleTextChange(text);
+                }}
                 onFocus={() => {
                   if (reactionTargetId) chat.dismissReactionPicker();
                 }}
-                onSend={() => void chat.sendMessage(t('experiences.chat.sendError'))}
+                onBlur={typing.stopTyping}
+                onSend={() => {
+                  // Sending clears the composer programmatically (no onChangeText),
+                  // so end our typing state explicitly.
+                  typing.stopTyping();
+                  void chat.sendMessage(t('experiences.chat.sendError'));
+                }}
                 sending={chat.sending}
                 canSendBody={chat.canSendBody}
                 placeholder={t('experiences.chat.placeholder')}

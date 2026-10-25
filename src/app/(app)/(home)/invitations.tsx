@@ -114,7 +114,7 @@ export default function ExperienceInvitationsScreen() {
             <Text variant="subtitle" style={styles.empty}>
               {t('experiences.invites.empty')}
             </Text>
-          ) : null
+          ) : undefined
         }
       />
     </InsetView>

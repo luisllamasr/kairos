@@ -100,7 +100,7 @@ Do **not** treat these as unfinished audit debt of the same kind as the closed s
 | **Dev vs prod Supabase split** (#2) | Ops/account work; required before real users, not blocking feature development |
 | **Crash reporting / analytics** (#4, e.g. Sentry/PostHog) | Launch observability; integrate before strangers use the app |
 | **EAS / store release pipeline** (#5) | Required before store submission |
-| **DB password rotation** (#33) | Operational; still standing risk — do before public exposure, independently of feature work |
+| **DB password rotation** (#33) | **Dev project: done (Oct 2026)** — rotated as a precaution; the new value is stored locally, outside the repository, and nothing in the repo, CI, scripts or Edge Functions depends on the database password. **Still open: a separate rotation of the *production* project's database password before public exposure**, independently of feature work |
 | **Comprehensive test suite** (#1 full) | Correctly sequenced after a stable base; CI typecheck/lint is the interim gate |
 | **React Query / shared cache** (#25) | Less urgent after stale guards + hooks; revisit when adding many new screens |
 | **Cross-screen list/mutation boilerplate** (#29) | Maintainability only; partial relief already from detail/chat hooks |
@@ -113,7 +113,7 @@ Do **not** treat these as unfinished audit debt of the same kind as the closed s
 1. **Resume product work** on the documented next major feature: **Settings & Privacy** (layered profile visibility) — or the next milestone you explicitly choose — without reopening closed hardening items mid-feature.  
 2. **Keep the CI habit:** run `npm run ci` locally; don’t weaken the correctness ESLint set for convenience.  
 3. **Touch invite/leave/transform logic carefully** — lifecycle rules are now load-bearing and documented in `PROJECT.md`; prefer migrations + docs updates when changing them.  
-4. **Schedule release-prep as its own phase** before public launch: password rotation, env split, Sentry, EAS, accessibility.  
+4. **Schedule release-prep as its own phase** before public launch: production database password rotation (the dev project's was rotated in Oct 2026), env split, Sentry, EAS, accessibility.
 5. **Optional parked UX** (not blockers): reaction-picker hit targets / floating picker polish; memories leave still uses an older “transfer before leave” dialog vs experience leave-successor — align when touching memories.  
 6. **Second from-scratch audit** only after a meaningful feature chunk or before launch — not immediately; the base is now coherent enough to build on.
 

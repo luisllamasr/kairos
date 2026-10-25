@@ -1,10 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
+import type { ColorValue } from 'react-native';
 
 import { BootstrapScreen } from '@/components/BootstrapScreen';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
+
+// Expo Router (SDK 58) types the tab icon tint as the full `ColorValue`, which
+// can also be a number or null. Our tint colors are always theme strings, so we
+// narrow to the string form `Ionicons` accepts.
+function tabIconColor(color: ColorValue): string | undefined {
+  return typeof color === 'string' ? color : undefined;
+}
 
 export default function AppLayout() {
   const { session, profile, profileError, loading } = useAuth();
@@ -40,7 +48,11 @@ export default function AppLayout() {
         options={{
           title: t('tab.home'),
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'home' : 'home-outline'}
+              size={24}
+              color={tabIconColor(color)}
+            />
           ),
           popToTopOnBlur: true,
         }}
@@ -50,7 +62,11 @@ export default function AppLayout() {
         options={{
           title: t('tab.search'),
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'search' : 'search-outline'}
+              size={24}
+              color={tabIconColor(color)}
+            />
           ),
           popToTopOnBlur: true,
         }}
@@ -60,7 +76,11 @@ export default function AppLayout() {
         options={{
           title: t('tab.profile'),
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'person' : 'person-outline'}
+              size={24}
+              color={tabIconColor(color)}
+            />
           ),
           // Reset the Profile stack to index when leaving the tab (e.g. from Edit Profile).
           popToTopOnBlur: true,

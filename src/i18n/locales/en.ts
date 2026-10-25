@@ -188,6 +188,10 @@ export const en = {
   'experiences.chat.deleteError': 'Could not delete this message. Please try again.',
   'experiences.chat.reactError': 'Could not update your reaction. Please try again.',
   'experiences.chat.loadingOlder': 'Loading earlier messages…',
+  'experiences.chat.typing.single': '{{name}} is typing…',
+  'experiences.chat.typing.pair': '{{first}} and {{second}} are typing…',
+  'experiences.chat.typing.many': 'Several people are typing…',
+  'experiences.chat.typing.someone': 'Someone',
   'experiences.chat.leaderOnlyNotice':
     'Only the leader can send messages in this plan. You can still read and react.',
   'experiences.chat.actionsTitle': 'Message',
@@ -350,6 +354,15 @@ export const en = {
   'publicProfile.mutualFriendsList.title': 'Mutual friends',
   'publicProfile.mutualFriendsList.empty': 'No mutual friends yet.',
   'publicProfile.mutualFriendsList.error': 'Could not load mutual friends. Please try again.',
+
+  'publicMemory.back': 'Back',
+  'publicMemory.loadError': 'Could not load this memory. Please try again.',
+  'publicMemory.notFound': 'Memory not found',
+  'publicMemory.notFoundHint': 'This memory may not exist or may not be available to you.',
+  'publicMemory.photos': 'Photos',
+  'publicMemory.noPhotos': 'No photos yet.',
+  'publicMemory.participantCount.one': '{{count}} person shared this memory',
+  'publicMemory.participantCount.other': '{{count}} people shared this memory',
 
   'friends.title': 'Friends',
   'friends.subtitle': 'People you share a mutual friendship with on Kairos.',

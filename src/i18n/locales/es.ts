@@ -190,6 +190,10 @@ export const es: Record<TranslationKey, string> = {
   'experiences.chat.deleteError': 'No se pudo eliminar este mensaje. Por favor, inténtalo de nuevo.',
   'experiences.chat.reactError': 'No se pudo actualizar tu reacción. Por favor, inténtalo de nuevo.',
   'experiences.chat.loadingOlder': 'Cargando mensajes anteriores…',
+  'experiences.chat.typing.single': '{{name}} está escribiendo…',
+  'experiences.chat.typing.pair': '{{first}} y {{second}} están escribiendo…',
+  'experiences.chat.typing.many': 'Varias personas están escribiendo…',
+  'experiences.chat.typing.someone': 'Alguien',
   'experiences.chat.leaderOnlyNotice':
     'Solo el líder puede enviar mensajes en este plan. Aún puedes leer y reaccionar.',
   'experiences.chat.actionsTitle': 'Mensaje',
@@ -352,6 +356,15 @@ export const es: Record<TranslationKey, string> = {
   'publicProfile.mutualFriendsList.title': 'Amigos en común',
   'publicProfile.mutualFriendsList.empty': 'Todavía no hay amigos en común.',
   'publicProfile.mutualFriendsList.error': 'No se pudieron cargar los amigos en común. Por favor, inténtalo de nuevo.',
+
+  'publicMemory.back': 'Atrás',
+  'publicMemory.loadError': 'No se pudo cargar este recuerdo. Por favor, inténtalo de nuevo.',
+  'publicMemory.notFound': 'Recuerdo no encontrado',
+  'publicMemory.notFoundHint': 'Este recuerdo puede no existir o no estar disponible para ti.',
+  'publicMemory.photos': 'Fotos',
+  'publicMemory.noPhotos': 'Aún no hay fotos.',
+  'publicMemory.participantCount.one': '{{count}} persona compartió este recuerdo',
+  'publicMemory.participantCount.other': '{{count}} personas compartieron este recuerdo',
 
   'friends.title': 'Amigos',
   'friends.subtitle': 'Personas con las que compartes amistad mutua en Kairos.',
