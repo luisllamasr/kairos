@@ -29,13 +29,16 @@ import {
   canEditExperience,
   canLeaveExperience,
   canManageExperienceParticipants,
+  canRemoveExperienceParticipant,
   canReviveExperience,
+  canTransferExperienceLeadership,
   Experience,
   ExperienceInvitation,
   ExperienceInviteSuggestion,
   ExperienceParticipant,
   hasActiveExperienceLeader,
   isExperienceEnded,
+  isExperienceNotStarted,
   isExperienceUpcoming,
   isLastExperienceParticipant,
   isPendingExperienceInvitee,
@@ -150,18 +153,21 @@ export function useExperienceDetail(experienceId: string | null) {
   const contentExperience = experience?.id === experienceId ? experience : null;
 
   const upcoming = experience ? isExperienceUpcoming(experience) : false;
+  const notStarted = experience ? isExperienceNotStarted(experience) : false;
   const ended = experience ? isExperienceEnded(experience) : false;
   const cancelled = experience?.status === 'cancelled';
   const editable = experience ? canEditExperience(experience) : false;
   const cancellable = experience ? canCancelExperience(experience) : false;
   const manageable = experience ? canManageExperienceParticipants(experience) : false;
+  const canRemoveParticipant = experience ? canRemoveExperienceParticipant(experience) : false;
+  const canTransferLeadership = experience ? canTransferExperienceLeadership(experience) : false;
   const leavable = experience ? canLeaveExperience(experience) : false;
   const leaveNeedsSuccessor = experience
     ? needsLeaveSuccessor(experience, participants.length)
     : false;
   const leaveDeletesPlan = isLastExperienceParticipant(participants.length);
   const revivable = experience ? canReviveExperience(experience) : false;
-  const invitesOpen = experience ? upcoming && hasActiveExperienceLeader(experience) : false;
+  const invitesOpen = experience ? notStarted && hasActiveExperienceLeader(experience) : false;
   const pendingInvitee = experience ? isPendingExperienceInvitee(experience) : false;
   const isMember = experience?.am_participant ?? false;
   const chatAccessible = experience ? canAccessExperienceChat(experience) : false;
@@ -431,6 +437,8 @@ export function useExperienceDetail(experienceId: string | null) {
     editable,
     cancellable,
     manageable,
+    canRemoveParticipant,
+    canTransferLeadership,
     leavable,
     leaveNeedsSuccessor,
     leaveDeletesPlan,

@@ -8,6 +8,8 @@ import { useI18n } from '@/i18n';
 interface Props {
   participantName: string;
   disabled?: boolean;
+  showTransfer?: boolean;
+  showRemove?: boolean;
   onTransfer: () => void;
   onRemove: () => void;
 }
@@ -15,6 +17,8 @@ interface Props {
 export function ExperienceParticipantActionsMenu({
   participantName,
   disabled = false,
+  showTransfer = true,
+  showRemove = true,
   onTransfer,
   onRemove,
 }: Props) {
@@ -24,21 +28,30 @@ export function ExperienceParticipantActionsMenu({
   function openMenu() {
     if (disabled) return;
 
-    Alert.alert(participantName, undefined, [
-      {
+    const buttons: {
+      text: string;
+      onPress?: () => void;
+      style?: 'cancel' | 'destructive';
+    }[] = [];
+    if (showTransfer) {
+      buttons.push({
         text: t('experiences.detail.transferLeadership'),
         onPress: onTransfer,
-      },
-      {
+      });
+    }
+    if (showRemove) {
+      buttons.push({
         text: t('experiences.participants.remove'),
         style: 'destructive',
         onPress: onRemove,
-      },
-      {
-        text: t('experiences.participants.menuCancel'),
-        style: 'cancel',
-      },
-    ]);
+      });
+    }
+    buttons.push({
+      text: t('experiences.participants.menuCancel'),
+      style: 'cancel',
+    });
+
+    Alert.alert(participantName, undefined, buttons);
   }
 
   return (

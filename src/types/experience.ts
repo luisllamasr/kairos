@@ -93,6 +93,15 @@ export type ExperienceInviteSuggestion = {
   reviewed_at: string | null;
 };
 
+/** Planned and not yet at starts_at — edit, cancel, invite, and leader-remove. */
+export function isExperienceNotStarted(
+  experience: Pick<Experience, 'status' | 'starts_at'>,
+): boolean {
+  if (experience.status !== 'planned') return false;
+  return new Date(experience.starts_at).getTime() > Date.now();
+}
+
+/** Planned and not yet due to become a memory (transform_at still in the future). */
 export function isExperienceUpcoming(
   experience: Pick<Experience, 'status' | 'transform_at'>,
 ): boolean {
@@ -132,15 +141,26 @@ export function canManageExperienceParticipants(experience: Experience): boolean
     experience.am_participant &&
     experience.am_organizer &&
     hasActiveExperienceLeader(experience) &&
-    isExperienceUpcoming(experience)
+    isExperienceNotStarted(experience)
+  );
+}
+
+export function canRemoveExperienceParticipant(experience: Experience): boolean {
+  return canManageExperienceParticipants(experience);
+}
+
+/** Leadership transfer stays available during the live window until transform. */
+export function canTransferExperienceLeadership(experience: Experience): boolean {
+  return (
+    experience.am_participant &&
+    experience.am_organizer &&
+    hasActiveExperienceLeader(experience)
   );
 }
 
 export function canEditExperience(experience: Experience): boolean {
-  if (!experience.am_participant) return false;
-  if (!isExperienceUpcoming(experience)) return false;
-  if (experience.edit_info_policy === 'leader_only' && !experience.am_organizer) return false;
-  return true;
+  if (!experience.am_participant || !experience.am_organizer) return false;
+  return isExperienceNotStarted(experience);
 }
 
 export function canCancelExperience(experience: Experience): boolean {
@@ -148,7 +168,7 @@ export function canCancelExperience(experience: Experience): boolean {
     experience.am_participant &&
     experience.am_organizer &&
     hasActiveExperienceLeader(experience) &&
-    isExperienceUpcoming(experience)
+    isExperienceNotStarted(experience)
   );
 }
 

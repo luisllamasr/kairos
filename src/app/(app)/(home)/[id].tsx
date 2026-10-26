@@ -51,6 +51,8 @@ export default function ExperienceDetailScreen() {
     editable,
     cancellable,
     manageable,
+    canRemoveParticipant,
+    canTransferLeadership,
     leavable,
     leaveNeedsSuccessor,
     leaveDeletesPlan,
@@ -357,7 +359,8 @@ export default function ExperienceDetailScreen() {
           <ExperienceParticipantsSection
             participants={participants}
             cancelled={!!cancelled}
-            showActions={isMember && manageable}
+            showTransfer={isMember && canTransferLeadership}
+            showRemove={isMember && canRemoveParticipant}
             myUserId={myUserId}
             actionLoading={actionLoading}
             title={t('experiences.participants.title')}
@@ -388,7 +391,7 @@ export default function ExperienceDetailScreen() {
               pendingStatusLabel={t('experiences.invites.pendingStatus')}
               unknownLabel={t('experiences.participants.unknown')}
               withdrawLabel={t('experiences.invites.withdraw')}
-              canWithdraw={manageable}
+              canWithdraw={canTransferLeadership}
               actionLoading={actionLoading}
               onWithdraw={(invitationId) => {
                 const invitation = pendingInvitations.find(

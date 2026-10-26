@@ -13,7 +13,8 @@ import {
 interface Props {
   participants: ExperienceParticipant[];
   cancelled: boolean;
-  showActions: boolean;
+  showTransfer: boolean;
+  showRemove: boolean;
   myUserId: string | null;
   actionLoading: boolean;
   title: string;
@@ -26,7 +27,8 @@ interface Props {
 export function ExperienceParticipantsSection({
   participants,
   cancelled,
-  showActions,
+  showTransfer,
+  showRemove,
   myUserId,
   actionLoading,
   title,
@@ -49,7 +51,9 @@ export function ExperienceParticipantsSection({
       {participants.map((participant) => {
         const name = labelFor(participant);
         const canActOnRow =
-          showActions && !participant.is_organizer && participant.user_id !== myUserId;
+          (showTransfer || showRemove) &&
+          !participant.is_organizer &&
+          participant.user_id !== myUserId;
 
         return (
           <View key={participant.participant_id} style={styles.participantRow}>
@@ -68,6 +72,8 @@ export function ExperienceParticipantsSection({
               <ExperienceParticipantActionsMenu
                 participantName={name}
                 disabled={actionLoading}
+                showTransfer={showTransfer}
+                showRemove={showRemove}
                 onTransfer={() => onTransfer(participant)}
                 onRemove={() => onRemove(participant)}
               />

@@ -374,7 +374,7 @@ A **dated plan** to live a real moment — solo or with others (others in M14).
 
 Between `starts_at` and automatic transform, the plan is **being lived**.
 
-Future (M13+): in-window capture (“Save a photo for this memory”) attaches assets that transfer into the generated memory. Architecture must keep `transform_at` after `ends_at` with a grace period so post-moment capture is possible.
+Between `starts_at` and `ends_at` the plan is **being lived**: plan information is locked, cancellation and leader-remove are not allowed, chat and other permitted participant actions continue. Photos are added on the **memory** after transform — there is no live-window capture on the experience. A delayed in-plan photo reveal (saved during the event, visible only after it becomes a memory) is a **separate future feature**, not part of this lifecycle.
 
 ### Memory (M13+)
 
@@ -413,17 +413,16 @@ Kairos is **not** a task manager. Users do not tap “Complete plan.”
 **Rule:**
 
 ```text
-transform_at = ends_at + grace_period
+transform_at = ends_at
 ```
 
-- **`grace_period`:** ~3 hours after `ends_at` (exact value set in migration; allows the moment to run long and supports future in-window capture).
-- A scheduled job runs transform when `now() >= transform_at` and status is still active/planned.
+- At `ends_at` the plan is **logically eligible** to become a memory. The actual INSERT/DELETE may lag: cron `transform_due_experiences` every 15 minutes, plus client `transform_my_due_experiences` (Home / Profile / memories list) and `ensure_experience_transformed` (detail / chat).
 - **M13** implements `transform_experience_to_memory()` (atomic insert memory + delete experience).
-- **M12** stores `transform_at` and purges **cancelled** rows only; transform RPC ships in M13.
+- Cancelled plans never transform; they purge at `purge_at`.
 
 **No manual complete** as the primary lifecycle path.
 
-**If dates change:** recompute `transform_at` on edit while the plan is still upcoming.
+**If dates change:** recompute `transform_at` on edit while the plan has not started (`starts_at > now()`). After `starts_at`, plan information (including dates) cannot be edited.
 
 ### Experience lifecycle (M14 — locked)
 
@@ -432,8 +431,8 @@ Experiences represent **who is currently planning to attend**. Memories represen
 | Action | Who | Effect |
 |--------|-----|--------|
 | **Leave** | Any participant | `DELETE` their `experience_participant` row — **no tombstone**, no `left_at`. Active leader with others remaining must choose a successor in the same flow (`leave_experience` + `p_new_organizer_id`). |
-| **Remove participant** | Leader only | Hard-delete another participant’s row (moderation; toxic participant) — not the same as leaving |
-| **Cancel** | Leader only (planned) | `status = cancelled`, set `cancelled_at` + `purge_at`; plan stays visible to participants until purge window |
+| **Remove participant** | Leader only, and only while `starts_at > now()` | Hard-delete another participant’s row (moderation) — not the same as leaving. Not allowed once the plan has started. Memories have no remove-participant action. |
+| **Cancel** | Leader only, and only while `starts_at > now()` | `status = cancelled`, set `cancelled_at` + `purge_at`; plan stays visible to participants until purge window. Not allowed once the plan has started. |
 | **Revive** | Any active participant | `cancelled` → `planned` if **`starts_at > now()`**; reviver becomes `organizer_id` |
 
 **No product “Delete / Remove plan” action:** Participants exit only via **Leave**. The experience continues while anyone remains. When the **last** participant leaves, the server orphans and deletes the experience (`purge_experience_if_orphaned`). A `delete_experience` RPC may still exist for internal/admin use, but it is **not** exposed in the app UI — wording like “Remove plan” previously understated a hard-delete-for-everyone action and duplicated Leave + orphan purge.
@@ -1052,7 +1051,7 @@ experiences.chat_policy  memory_permission_policy NOT NULL DEFAULT 'all_particip
 
 | Capability | Rule |
 |------------|------|
-| `edit_info` | Participant; `planned` + `transform_at > now()`; `edit_info_policy` |
+| `edit_info` | Organizer; `planned` + `starts_at > now()` (`edit_info_policy` is stored and copied to memories, but does not authorize experience edits) |
 | `set_edit_policy` | Organizer; `planned` or `cancelled` |
 | `chat_read` | Participant; `planned` or `cancelled` |
 | `chat_write` | Participant; `planned` or `cancelled`; `chat_policy` |
@@ -1317,13 +1316,9 @@ Philosophy mirrors **friend requests**: pending state is temporary; declining do
 
 ## Edit permissions
 
-Same enum as memories: `edit_info_policy` on `experiences`. **`chat_policy`** (M15) is separate — see Milestone 15.
+Experience **information** (title, description, location, dates) is **leader-only** and only while `starts_at > now()`. The `edit_info_policy` column remains on the row (default `all_participants`) so transform can copy it onto the memory; it does **not** authorize experience edits. **`chat_policy`** (M15) is separate and may still be changed during a live plan.
 
-- **`all_participants`:** any accepted participant may edit title, description, location (via RPC + optional `expected_updated_at`).
-- **`leader_only`:** only `organizer_id`.
-- **Not governed by policy:** cancel, revive, invite, suggest, remove participant, leadership transfer, leave.
-
-Default for new private plans: `all_participants` (match memory default).
+- **Not the same clock:** cancel and leader-remove also require `starts_at > now()`. Leadership transfer, leave, chat, and mute do not.
 
 ## Leadership (experiences + memories)
 
@@ -1541,7 +1536,7 @@ Run after `npx supabase db push` on linked Supabase.
 **Manual transform test (SQL)**
 
 - [ ] `experiences_transform_after_end` blocks `transform_at < ends_at` — correct
-- [ ] To force transform: set `ends_at` in the past, then `transform_at = ends_at + interval '3 hours'` (or any value ≥ `ends_at` and ≤ `now()`), then call `transform_my_due_experiences()` or open Profile
+- [ ] To force transform: set `ends_at` (and `transform_at`) in the past, then call `transform_my_due_experiences()` or open Profile
 
 **Experience dates**
 
@@ -1651,7 +1646,7 @@ Stored columns and why they exist — do not remove without updating this sectio
 
 | Column | Recommendation | Rationale |
 |--------|----------------|-----------|
-| `transform_at` | **Keep stored** | Recomputed on edit when `ends_at` changes; indexed for cron (`transform_at <= now()`). Storing avoids repeating `ends_at + interval` in every query and preserves the value if grace-period rules change later. |
+| `transform_at` | **Keep stored** | Equals `ends_at` (recomputed on edit before start). Indexed for cron (`transform_at <= now()`). Processing may lag the logical `ends_at` boundary by up to one 15-minute cron interval. |
 | `purge_at` | **Keep stored** | Set at cancel time from `ends_at + 24h`; indexed for purge cron. Cancel can happen long before `ends_at`; a computed rule would need `cancelled_at` + logic anyway. |
 | `cancelled_at` | **Keep** | Audit and future UX (“cancelled on …”); required by `experiences_cancelled_consistent` CHECK. |
 | `created_by` | **Keep** | Immutable audit of who created the row; distinct from `organizer_id` when leadership transfers (M14). Never shown in UI. |
