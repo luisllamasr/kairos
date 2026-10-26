@@ -1316,7 +1316,7 @@ Philosophy mirrors **friend requests**: pending state is temporary; declining do
 
 ## Edit permissions
 
-Experience **information** (title, description, location, dates) is **leader-only** and only while `starts_at > now()`. The `edit_info_policy` column remains on the row (default `all_participants`) so transform can copy it onto the memory; it does **not** authorize experience edits. **`chat_policy`** (M15) is separate and may still be changed during a live plan.
+Experience **information** (title, description, location, dates) is **leader-only** and only while `starts_at > now()`. The `edit_info_policy` column remains on the row (default `all_participants`) so transform can copy it onto the memory; it does **not** authorize experience edits. **`chat_policy`** (M15) is separate and may still be changed during a live plan. `update_experience` does **not** rewrite `visibility` (M16 Phase 1); there is still no RPC in this phase that changes visibility.
 
 - **Not the same clock:** cancel and leader-remove also require `starts_at > now()`. Leadership transfer, leave, chat, and mute do not.
 
@@ -1401,7 +1401,7 @@ Insert a notification row when the event occurs **unless** the recipient has mut
 | `experience_participant_joined` | Leader + other participants (not joiner) | Yes |
 | `experience_participant_left` | Leader + remaining (not leaver) | Yes |
 | `experience_participant_removed` | Removed user | Yes |
-| `experience_updated` | Non-muted participants except editor | Yes — **one type per edit RPC**, not per field |
+| `experience_updated` | Non-muted participants except editor | Yes — **one type per edit RPC**, not per field. Restored in M16 Phase 1: emitted only when title, description, location_name, coordinates, `starts_at`, or `ends_at` actually change. A no-op save does not notify. |
 | `experience_cancelled` | Non-muted participants except leader | Yes |
 | `experience_revived` | Non-muted participants except reviver | Yes |
 | `experience_deleted` | All participants before delete | Optional — row gone; brief in-app toast may suffice |
